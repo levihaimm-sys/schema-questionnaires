@@ -294,9 +294,18 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderCountHighResults(results) {
+    results.sort((a, b) => b.score - a.score);
     const active = results.filter(r => r.status === 'active');
     const inactive = results.filter(r => r.status === 'inactive');
     let html = '';
+
+    // Graph overview
+    html += renderBarChart(results.map(r => ({
+      label: r.name,
+      value: r.score,
+      max: r.maxScore,
+      color: r.status === 'active' ? '#e74c3c' : '#7a9e8e'
+    })));
 
     if (active.length > 0) {
       html += '<div class="category-header">סכמות אקטיביות (משמעותיות)</div>';
@@ -334,7 +343,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderDualResults(results) {
-    return results.map(r => `
+    results.sort((a, b) => ((b.firstScore + b.secondScore) / 2) - ((a.firstScore + a.secondScore) / 2));
+
+    // Graph overview
+    let html = renderDualBarChart(results);
+
+    html += results.map(r => `
       <div class="result-card">
         <div class="result-info">
           <div class="result-name">${r.name}</div>
@@ -352,17 +366,21 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
       </div>
     `).join('');
+    return html;
   }
 
   function renderAverageResults(results) {
-    let html = '';
-    let currentCategory = '';
+    results.sort((a, b) => b.score - a.score);
+
+    // Graph overview
+    let html = renderBarChart(results.map(r => ({
+      label: r.name,
+      value: r.score,
+      max: r.maxScore,
+      color: r.level === 'high' ? '#e74c3c' : r.level === 'moderate' ? '#f39c12' : '#7a9e8e'
+    })));
 
     for (const r of results) {
-      if (r.category && r.category !== currentCategory) {
-        currentCategory = r.category;
-        html += `<div class="category-header">${currentCategory}</div>`;
-      }
       const barWidth = Math.round((r.score / r.maxScore) * 100);
       const barColor = r.level === 'high' ? '#e74c3c' : r.level === 'moderate' ? '#f39c12' : '#7a9e8e';
       html += `
@@ -383,6 +401,57 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     return html;
+  }
+
+  function renderBarChart(items) {
+    const maxVal = Math.max(...items.map(i => i.max));
+    return `
+      <div class="chart-card">
+        <div class="chart-title">סקירה גרפית</div>
+        <div class="chart-container">
+          ${items.map(item => {
+            const pct = Math.round((item.value / maxVal) * 100);
+            return `
+              <div class="chart-row">
+                <div class="chart-label">${item.label}</div>
+                <div class="chart-bar-bg">
+                  <div class="chart-bar-fill" style="width: ${pct}%; background: ${item.color};"></div>
+                </div>
+                <div class="chart-value" style="color: ${item.color};">${typeof item.value === 'number' && item.value % 1 !== 0 ? item.value.toFixed(1) : item.value}</div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderDualBarChart(results) {
+    return `
+      <div class="chart-card">
+        <div class="chart-title">סקירה גרפית</div>
+        <div class="chart-legend">
+          <span class="chart-legend-item"><span class="chart-legend-dot" style="background:#e67e22;"></span>${results[0].firstLabel}</span>
+          <span class="chart-legend-item"><span class="chart-legend-dot" style="background:#5b7a6e;"></span>${results[0].secondLabel}</span>
+        </div>
+        <div class="chart-container">
+          ${results.map(r => `
+            <div class="chart-row">
+              <div class="chart-label">${r.name}</div>
+              <div class="chart-dual-bars">
+                <div class="chart-bar-bg">
+                  <div class="chart-bar-fill" style="width: ${Math.round((r.firstScore / 6) * 100)}%; background: #e67e22;"></div>
+                </div>
+                <div class="chart-bar-bg">
+                  <div class="chart-bar-fill" style="width: ${Math.round((r.secondScore / 6) * 100)}%; background: #5b7a6e;"></div>
+                </div>
+              </div>
+              <div class="chart-value">${r.firstScore.toFixed(1)} | ${r.secondScore.toFixed(1)}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
   }
 
   function getScoreColor(score) {
