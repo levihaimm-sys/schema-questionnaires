@@ -175,7 +175,7 @@ body {
 /* ── Scale Buttons ── */
 .scale-with-labels { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; max-width: 420px; margin: 0 auto; }
 .scale-item { display: flex; flex-direction: column; align-items: center; }
-.scale-item-label { font-size: 0.68rem; color: #9a8f87; text-align: center; margin-top: 6px; line-height: 1.3; word-break: break-word; }
+.scale-item-label { font-size: 0.68rem; color: #3d3530; text-align: center; margin-top: 6px; line-height: 1.3; word-break: break-word; }
 .scale-container { display: flex; gap: 8px; justify-content: center; }
 
 .scale-btn {
