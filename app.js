@@ -2,6 +2,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const data = window.QUESTIONNAIRE_DATA;
   if (!data) return;
 
+  const APPS_SCRIPT_URL = 'YOUR_APPS_SCRIPT_URL_HERE'; // שנה לURL של ה-Apps Script
+
   const app = document.getElementById('app');
   const state = { answers: {}, name: '' };
 
@@ -183,6 +185,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const results = calculateResults();
     renderResults(results);
+    sendResults(results);
+  }
+
+  function sendResults(results) {
+    if (APPS_SCRIPT_URL === 'YOUR_APPS_SCRIPT_URL_HERE') return;
+    const payload = {
+      name: state.name,
+      questionnaire: data.title,
+      date: new Date().toISOString(),
+      results: results
+    };
+    fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(err => console.log('Send error:', err));
   }
 
   function calculateResults() {
