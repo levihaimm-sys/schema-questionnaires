@@ -13,7 +13,7 @@
 // 7. העתק את ה-URL שקיבלת והדבק ב-app.js (APPS_SCRIPT_URL)
 // ============================================
 
-const SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID_HERE'; // שנה לID של הגיליון שלך
+const SPREADSHEET_ID = '1po-SxGqhfDthjp1Jja2ZYcAjIDAj5LPMWNTnodFPNGw';
 const EMAIL_TO = 'levihaimm@gmail.com';
 
 function doPost(e) {
