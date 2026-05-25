@@ -36,17 +36,18 @@ function doPost(e) {
 
 function saveToSheet(data) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  let sheet = ss.getSheetByName(data.questionnaire);
+  const sheetName = data.name + ' - ' + data.questionnaire;
+  let sheet = ss.getSheetByName(sheetName);
 
   // Create sheet if it doesn't exist
   if (!sheet) {
-    sheet = ss.insertSheet(data.questionnaire);
+    sheet = ss.insertSheet(sheetName);
     // Add headers
-    const headers = ['תאריך', 'שם'];
+    const headers = ['תאריך'];
     data.results.forEach(r => headers.push(r.name));
     if (data.results[0] && data.results[0].firstScore !== undefined) {
       // Dual rating - add second parent columns
-      const headers2 = ['תאריך', 'שם'];
+      const headers2 = ['תאריך'];
       data.results.forEach(r => headers2.push(r.name + ' - ' + r.firstLabel));
       data.results.forEach(r => headers2.push(r.name + ' - ' + r.secondLabel));
       sheet.appendRow(headers2);
@@ -59,7 +60,7 @@ function saveToSheet(data) {
   }
 
   // Add data row
-  const row = [new Date().toLocaleDateString('he-IL'), data.name];
+  const row = [new Date().toLocaleDateString('he-IL')];
 
   if (data.results[0] && data.results[0].firstScore !== undefined) {
     // Dual rating
