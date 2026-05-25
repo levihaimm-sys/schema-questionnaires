@@ -284,30 +284,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const resultsDiv = document.createElement('div');
     resultsDiv.className = 'results-container';
 
-    let html = `
+    resultsDiv.innerHTML = `
       <div class="container">
-        <div class="results-header">
-          <h2>תוצאות: ${data.title}</h2>
-          <p>${state.name} &bull; ${new Date().toLocaleDateString('he-IL')}</p>
-        </div>
-    `;
-
-    if (data.scoring.method === 'countHigh') {
-      html += renderCountHighResults(results);
-    } else if (data.dualRating) {
-      html += renderDualResults(results);
-    } else {
-      html += renderAverageResults(results);
-    }
-
-    html += `
-        <div class="submit-section">
-          <button class="submit-btn" onclick="window.print()">הדפסת התוצאות</button>
+        <div class="thank-you-card">
+          <div class="thank-you-icon">✓</div>
+          <h2>תודה רבה, ${state.name}!</h2>
+          <p>מילאת בהצלחה את השאלון <strong>${data.title}</strong>.</p>
+          <p>המידע עבר למטפל שלך.</p>
         </div>
       </div>
     `;
 
-    resultsDiv.innerHTML = html;
     app.appendChild(resultsDiv);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
