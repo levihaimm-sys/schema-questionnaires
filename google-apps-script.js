@@ -78,45 +78,95 @@ function sendEmail(data) {
   const questionnaire = data.questionnaire;
   const date = new Date().toLocaleDateString('he-IL');
 
-  let resultsHtml = '<table dir="rtl" style="border-collapse:collapse;font-family:Arial,sans-serif;width:100%">';
-  resultsHtml += '<tr style="background:#5b7a6e;color:white"><th style="padding:10px;text-align:right">שם</th>';
+  // Build scores table
+  let tableHtml = '<table dir="rtl" style="border-collapse:collapse;font-family:Arial,sans-serif;width:100%">';
+  tableHtml += '<tr style="background:#5b7a6e;color:white"><th style="padding:10px;text-align:right">שם</th>';
 
   if (data.results[0] && data.results[0].firstScore !== undefined) {
-    resultsHtml += `<th style="padding:10px">${data.results[0].firstLabel}</th>`;
-    resultsHtml += `<th style="padding:10px">${data.results[0].secondLabel}</th></tr>`;
+    tableHtml += `<th style="padding:10px">${data.results[0].firstLabel}</th>`;
+    tableHtml += `<th style="padding:10px">${data.results[0].secondLabel}</th></tr>`;
     data.results.forEach((r, i) => {
       const bg = i % 2 === 0 ? '#f9f7f5' : 'white';
-      resultsHtml += `<tr style="background:${bg}">`;
-      resultsHtml += `<td style="padding:8px 10px;border-bottom:1px solid #e8e0d8;font-weight:600">${r.name}</td>`;
-      resultsHtml += `<td style="padding:8px 10px;border-bottom:1px solid #e8e0d8;text-align:center;color:${getColorForScore(r.firstScore)};font-weight:700">${r.firstScore}</td>`;
-      resultsHtml += `<td style="padding:8px 10px;border-bottom:1px solid #e8e0d8;text-align:center;color:${getColorForScore(r.secondScore)};font-weight:700">${r.secondScore}</td>`;
-      resultsHtml += '</tr>';
+      tableHtml += `<tr style="background:${bg}">`;
+      tableHtml += `<td style="padding:8px 10px;border-bottom:1px solid #e8e0d8;font-weight:600">${r.name}</td>`;
+      tableHtml += `<td style="padding:8px 10px;border-bottom:1px solid #e8e0d8;text-align:center;color:${getColorForScore(r.firstScore)};font-weight:700">${r.firstScore}</td>`;
+      tableHtml += `<td style="padding:8px 10px;border-bottom:1px solid #e8e0d8;text-align:center;color:${getColorForScore(r.secondScore)};font-weight:700">${r.secondScore}</td>`;
+      tableHtml += '</tr>';
     });
   } else {
-    resultsHtml += '<th style="padding:10px">ציון</th>';
+    tableHtml += '<th style="padding:10px">ציון</th>';
     if (data.results[0].statusText) {
-      resultsHtml += '<th style="padding:10px">סטטוס</th>';
+      tableHtml += '<th style="padding:10px">סטטוס</th>';
     } else if (data.results[0].levelText) {
-      resultsHtml += '<th style="padding:10px">רמה</th>';
+      tableHtml += '<th style="padding:10px">רמה</th>';
     }
-    resultsHtml += '</tr>';
+    tableHtml += '</tr>';
 
     data.results.forEach((r, i) => {
       const bg = i % 2 === 0 ? '#f9f7f5' : 'white';
       const scoreColor = r.status === 'active' || r.level === 'high' ? '#e74c3c' :
                          r.level === 'moderate' ? '#f39c12' : '#5b7a6e';
-      resultsHtml += `<tr style="background:${bg}">`;
-      resultsHtml += `<td style="padding:8px 10px;border-bottom:1px solid #e8e0d8;font-weight:600">${r.name}</td>`;
-      resultsHtml += `<td style="padding:8px 10px;border-bottom:1px solid #e8e0d8;text-align:center;color:${scoreColor};font-weight:700">${r.score}${r.maxScore ? '/' + r.maxScore : ''}</td>`;
+      tableHtml += `<tr style="background:${bg}">`;
+      tableHtml += `<td style="padding:8px 10px;border-bottom:1px solid #e8e0d8;font-weight:600">${r.name}</td>`;
+      tableHtml += `<td style="padding:8px 10px;border-bottom:1px solid #e8e0d8;text-align:center;color:${scoreColor};font-weight:700">${r.score}${r.maxScore ? '/' + r.maxScore : ''}</td>`;
       if (r.statusText) {
-        resultsHtml += `<td style="padding:8px 10px;border-bottom:1px solid #e8e0d8;text-align:center">${r.statusText}</td>`;
+        tableHtml += `<td style="padding:8px 10px;border-bottom:1px solid #e8e0d8;text-align:center">${r.statusText}</td>`;
       } else if (r.levelText) {
-        resultsHtml += `<td style="padding:8px 10px;border-bottom:1px solid #e8e0d8;text-align:center">${r.levelText}</td>`;
+        tableHtml += `<td style="padding:8px 10px;border-bottom:1px solid #e8e0d8;text-align:center">${r.levelText}</td>`;
       }
-      resultsHtml += '</tr>';
+      tableHtml += '</tr>';
     });
   }
-  resultsHtml += '</table>';
+  tableHtml += '</table>';
+
+  // Build active schemas/modes explanation section
+  let activeHtml = '';
+  const activeResults = data.results.filter(r => {
+    if (r.status === 'active') return true;
+    if (r.level === 'high') return true;
+    if (r.level === 'moderate') return true;
+    if (r.firstScore !== undefined) return (r.firstScore >= 3.5 || r.secondScore >= 3.5);
+    return false;
+  });
+
+  if (activeResults.length > 0) {
+    activeHtml = '<div style="margin-top:24px;padding-top:20px;border-top:2px solid #e8e0d8">';
+    activeHtml += '<h3 style="color:#5b7a6e;font-size:16px;margin:0 0 16px">ממצאים בולטים והסבר:</h3>';
+
+    activeResults.forEach(r => {
+      const explanation = r.explanation || '';
+      if (!explanation) return;
+
+      let scoreText = '';
+      let borderColor = '#f39c12';
+      if (r.status === 'active') {
+        scoreText = `${r.score}/${r.maxScore} תשובות גבוהות – אקטיבית`;
+        borderColor = '#e74c3c';
+      } else if (r.level === 'high') {
+        scoreText = `ציון ${r.score} – גבוה`;
+        borderColor = '#e74c3c';
+      } else if (r.level === 'moderate') {
+        scoreText = `ציון ${r.score} – בינוני`;
+        borderColor = '#f39c12';
+      } else if (r.firstScore !== undefined) {
+        const parts = [];
+        if (r.firstScore >= 3.5) parts.push(`${r.firstLabel}: ${r.firstScore}`);
+        if (r.secondScore >= 3.5) parts.push(`${r.secondLabel}: ${r.secondScore}`);
+        scoreText = parts.join(' | ');
+        borderColor = '#e67e22';
+      }
+
+      activeHtml += `
+        <div style="border-right:4px solid ${borderColor};padding:12px 16px;margin-bottom:12px;background:#f9f7f5;border-radius:0 8px 8px 0">
+          <div style="font-weight:700;font-size:15px;color:#3d3530;margin-bottom:4px">${r.name}</div>
+          <div style="font-size:12px;color:${borderColor};font-weight:600;margin-bottom:8px">${scoreText}</div>
+          <div style="font-size:13px;color:#5a504a;line-height:1.7">${explanation}</div>
+        </div>
+      `;
+    });
+
+    activeHtml += '</div>';
+  }
 
   const subject = `תוצאות שאלון ${questionnaire} - ${name}`;
   const htmlBody = `
@@ -126,7 +176,8 @@ function sendEmail(data) {
         <p style="margin:6px 0 0;opacity:0.9">${name} &bull; ${date}</p>
       </div>
       <div style="background:white;padding:20px;border-radius:0 0 12px 12px;border:1px solid #e8e0d8;border-top:none">
-        ${resultsHtml}
+        ${tableHtml}
+        ${activeHtml}
       </div>
     </div>
   `;
