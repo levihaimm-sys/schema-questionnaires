@@ -15,6 +15,7 @@
 
 const SPREADSHEET_ID = '1po-SxGqhfDthjp1Jja2ZYcAjIDAj5LPMWNTnodFPNGw';
 const EMAIL_TO = 'levihaimm@gmail.com';
+const DASHBOARD_TOKEN = 'schema2024'; // סיסמת כניסה ללוח המטפל
 
 function doPost(e) {
   try {
@@ -195,8 +196,106 @@ function getColorForScore(score) {
   return '#5b7a6e';
 }
 
-// Test function
+// ============================================
+// Dashboard API – קריאת נתונים ללוח המטפל
+// ============================================
+
 function doGet(e) {
-  return ContentService.createTextOutput(JSON.stringify({ status: 'ok', message: 'Schema Questionnaire Backend is running' }))
+  const params = e ? e.parameter : {};
+  const action = params.action || 'status';
+  const token = params.token || '';
+  const callback = params.callback || '';
+
+  // Auth check for data actions
+  if (action !== 'status' && token !== DASHBOARD_TOKEN) {
+    return respond({ error: 'unauthorized' }, callback);
+  }
+
+  let result;
+  switch (action) {
+    case 'patients':
+      result = getPatientsList();
+      break;
+    case 'patient':
+      result = getPatientData(params.name || '');
+      break;
+    default:
+      result = { status: 'ok', message: 'Schema Questionnaire Backend is running' };
+  }
+
+  return respond(result, callback);
+}
+
+function respond(data, callback) {
+  const json = JSON.stringify(data);
+  if (callback) {
+    return ContentService.createTextOutput(callback + '(' + json + ')')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService.createTextOutput(json)
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function getPatientsList() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheets = ss.getSheets();
+  const patients = {};
+
+  sheets.forEach(sheet => {
+    const name = sheet.getName();
+    const sepIdx = name.indexOf(' - ');
+    if (sepIdx < 0) return;
+
+    const patientName = name.substring(0, sepIdx).trim();
+    const questionnaire = name.substring(sepIdx + 3).trim();
+
+    if (!patients[patientName]) {
+      patients[patientName] = { questionnaires: [] };
+    }
+
+    const lastRow = sheet.getLastRow();
+    let lastDate = '';
+    if (lastRow > 1) {
+      const val = sheet.getRange(lastRow, 1).getValue();
+      lastDate = val ? val.toString() : '';
+    }
+
+    patients[patientName].questionnaires.push({
+      name: questionnaire,
+      lastDate: lastDate,
+      entries: Math.max(0, lastRow - 1)
+    });
+  });
+
+  return { patients: patients };
+}
+
+function getPatientData(patientName) {
+  if (!patientName) return { error: 'missing patient name' };
+
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheets = ss.getSheets();
+  const data = { name: patientName, questionnaires: {} };
+  const prefix = patientName + ' - ';
+
+  sheets.forEach(sheet => {
+    const name = sheet.getName();
+    if (!name.startsWith(prefix)) return;
+
+    const questionnaire = name.substring(prefix.length).trim();
+    const lastRow = sheet.getLastRow();
+    const lastCol = sheet.getLastColumn();
+    if (lastRow < 2 || lastCol < 1) return;
+
+    const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+    const latestRow = sheet.getRange(lastRow, 1, 1, lastCol).getValues()[0];
+
+    data.questionnaires[questionnaire] = {
+      headers: headers,
+      scores: latestRow,
+      date: latestRow[0] ? latestRow[0].toString() : ''
+    };
+  });
+
+  return data;
 }
