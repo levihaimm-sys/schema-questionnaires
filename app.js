@@ -2,7 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const data = window.QUESTIONNAIRE_DATA;
   if (!data) return;
 
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyugUsQytnR1aE_FAJpwPRVYDa0o9HLpSHQZ2p-cbMP3UnSpZThQ6ISXNvHOVfrYs0wAQ/exec';
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyFY9hUzONyChF4eJ92J1FgvB9CfhR7hK74puwBcMyifZhaxZbEi84DUVGjJtUsmfdidA/exec';
 
   const app = document.getElementById('app');
   const state = { answers: {}, name: '' };
