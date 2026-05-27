@@ -195,14 +195,31 @@ body {
   width: 38px; font-size: 0.8rem; font-weight: 600;
   text-align: left; flex-shrink: 0;
 }
-/* Dual score row for YPI */
-.overview-dual-vals { display: flex; gap: 6px; flex-shrink: 0; }
-.overview-dual-val {
-  font-size: 0.75rem; font-weight: 600;
-  padding: 2px 8px; border-radius: 4px;
+/* YPI table layout in overview */
+.overview-ypi-table { display: flex; flex-direction: column; gap: 0; }
+.overview-ypi-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 0; border-bottom: 2px solid #e8e0d8;
+  margin-bottom: 4px;
 }
-.overview-dual-val.mom { background: rgba(231,76,60,0.08); color: #c0392b; }
-.overview-dual-val.dad { background: rgba(41,128,185,0.08); color: #2980b9; }
+.overview-ypi-header-name { flex: 1; }
+.overview-ypi-header-col {
+  width: 52px; text-align: center;
+  font-size: 0.82rem; font-weight: 700;
+}
+.overview-ypi-header-col.mom { color: #c0392b; }
+.overview-ypi-header-col.dad { color: #2980b9; }
+.overview-ypi-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid #f0ebe6;
+}
+.overview-ypi-row:last-child { border-bottom: none; }
+.overview-ypi-row-name { flex: 1; font-size: 0.82rem; color: #3d3530; }
+.overview-ypi-row-val {
+  width: 52px; text-align: center;
+  font-size: 0.82rem; font-weight: 700;
+}
 
 /* ── Chain Tab ── */
 .chain-intro {

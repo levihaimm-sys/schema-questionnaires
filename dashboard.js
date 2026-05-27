@@ -733,17 +733,30 @@
         keys.sort(function(a, b) { return data.items[b] - data.items[a]; });
       }
 
+      // YPI: table with אמא / אבא columns
+      if (type === 'ypi') {
+        html += '<div class="overview-ypi-table">';
+        html += '<div class="overview-ypi-header">' +
+          '<span class="overview-ypi-header-name"></span>' +
+          '<span class="overview-ypi-header-col mom">אמא</span>' +
+          '<span class="overview-ypi-header-col dad">אבא</span>' +
+        '</div>';
+        keys.forEach(function(name) {
+          var scores = data.items[name];
+          var momColor = scoreColor(scores.mother, 6);
+          var dadColor = scoreColor(scores.father, 6);
+          html += '<div class="overview-ypi-row">' +
+            '<span class="overview-ypi-row-name">' + escHtml(name) + '</span>' +
+            '<span class="overview-ypi-row-val" style="color:' + momColor + '">' + scores.mother.toFixed(1) + '</span>' +
+            '<span class="overview-ypi-row-val" style="color:' + dadColor + '">' + scores.father.toFixed(1) + '</span>' +
+          '</div>';
+        });
+        html += '</div>';
+      }
+
       keys.forEach(function(name) {
         if (type === 'ypi') {
-          var scores = data.items[name];
-          var maxScore = Math.max(scores.mother, scores.father);
-          html += '<div class="overview-row">' +
-            '<span class="overview-row-name">' + escHtml(name) + '</span>' +
-            '<div class="overview-dual-vals">' +
-              '<span class="overview-dual-val mom">אמא ' + scores.mother.toFixed(1) + '</span>' +
-              '<span class="overview-dual-val dad">אבא ' + scores.father.toFixed(1) + '</span>' +
-            '</div>' +
-          '</div>';
+          return; // already rendered above as table
         } else {
           var score = data.items[name];
           var max = type === 'ysq' ? 5 : 6;
