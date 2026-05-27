@@ -186,21 +186,37 @@
   // ════════════════════════════════════════════
   // DATA FETCHING
   // ════════════════════════════════════════════
-  function fetchJsonp(url) {
+  function fetchJsonp(url, timeoutMs) {
+    timeoutMs = timeoutMs || 10000;
     return new Promise(function(resolve, reject) {
       var cb = '_dcb_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
-      var script = document.createElement('script');
-      window[cb] = function(data) {
+      var timer = null;
+      var done = false;
+
+      function cleanup() {
+        done = true;
+        clearTimeout(timer);
         delete window[cb];
         if (script.parentNode) script.parentNode.removeChild(script);
+      }
+
+      var script = document.createElement('script');
+      window[cb] = function(data) {
+        if (done) return;
+        cleanup();
         resolve(data);
       };
       script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cb;
       script.onerror = function() {
-        delete window[cb];
-        if (script.parentNode) script.parentNode.removeChild(script);
-        reject(new Error('JSONP failed'));
+        if (done) return;
+        cleanup();
+        reject(new Error('JSONP script error'));
       };
+      timer = setTimeout(function() {
+        if (done) return;
+        cleanup();
+        reject(new Error('JSONP timeout'));
+      }, timeoutMs);
       document.head.appendChild(script);
     });
   }
@@ -212,19 +228,25 @@
       qs += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
     });
     var url = CONFIG.appsScriptUrl + '?' + qs;
+    var errors = [];
 
-    // JSONP first – more reliable with Google Apps Script's 302 redirect
+    // Strategy 1: regular fetch (works if CORS allows)
     try {
-      return await fetchJsonp(url);
+      var res = await fetch(url, { redirect: 'follow' });
+      var text = await res.text();
+      try { return JSON.parse(text); } catch(pe) { /* not JSON, try JSONP */ }
     } catch(e) {
-      try {
-        var res = await fetch(url, { redirect: 'follow' });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        return await res.json();
-      } catch(e2) {
-        throw e;
-      }
+      errors.push('fetch: ' + e.message);
     }
+
+    // Strategy 2: JSONP (works around CORS via script tag)
+    try {
+      return await fetchJsonp(url, 10000);
+    } catch(e) {
+      errors.push('jsonp: ' + e.message);
+    }
+
+    throw new Error('All fetch strategies failed: ' + errors.join('; '));
   }
 
   async function fetchPatients() {
@@ -240,7 +262,7 @@
       if (e.message === 'unauthorized') {
         state.error = 'סיסמה שגויה או לא תואמת את הסקריפט.';
       } else {
-        state.error = 'לא ניתן לטעון נתונים. ודא שעדכנת את הסקריפט בגוגל ופרסמת מחדש.';
+        state.error = 'לא ניתן לטעון נתונים: ' + e.message;
       }
       state.patients = {};
     }
