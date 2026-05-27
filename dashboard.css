@@ -272,18 +272,61 @@ body {
 }
 .chain-step-dot.parenting { background: #e67e22; box-shadow: 0 0 0 2px #e67e22; }
 .chain-step-dot.need { background: #e74c3c; box-shadow: 0 0 0 2px #e74c3c; }
+.chain-step-dot.belief { background: #c0392b; box-shadow: 0 0 0 2px #c0392b; }
+.chain-step-dot.triggers { background: #d35400; box-shadow: 0 0 0 2px #d35400; }
+.chain-step-dot.body { background: #e91e63; box-shadow: 0 0 0 2px #e91e63; }
 .chain-step-dot.modes { background: #8e44ad; box-shadow: 0 0 0 2px #8e44ad; }
 .chain-step-dot.positive { background: #27ae60; box-shadow: 0 0 0 2px #27ae60; }
 .chain-step-dot.corrective { background: #2980b9; box-shadow: 0 0 0 2px #2980b9; }
+.chain-step-dot.goal { background: #16a085; box-shadow: 0 0 0 2px #16a085; }
 
 .chain-step-label {
   font-size: 0.78rem; font-weight: 600; margin-bottom: 4px;
 }
 .chain-step-label.parenting { color: #e67e22; }
 .chain-step-label.need { color: #e74c3c; }
+.chain-step-label.belief { color: #c0392b; }
+.chain-step-label.triggers { color: #d35400; }
+.chain-step-label.body { color: #e91e63; }
 .chain-step-label.modes { color: #8e44ad; }
 .chain-step-label.positive { color: #27ae60; }
 .chain-step-label.corrective { color: #2980b9; }
+.chain-step-label.goal { color: #16a085; }
+
+/* FFF Badge on modes */
+.chain-fff-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  font-size: 0.7rem; font-weight: 600; margin-right: 4px;
+  vertical-align: middle;
+}
+.chain-fff-badge.fight { background: rgba(231,76,60,0.12); color: #c0392b; }
+.chain-fff-badge.flight { background: rgba(243,156,18,0.12); color: #d68910; }
+.chain-fff-badge.freeze { background: rgba(52,152,219,0.12); color: #2980b9; }
+.chain-fff-badge.play { background: rgba(39,174,96,0.12); color: #27ae60; }
+
+/* Extended modes section */
+.chain-extended-header {
+  font-size: 0.95rem; font-weight: 600; color: #8e44ad;
+  margin: 32px 0 14px; padding: 10px 18px;
+  background: rgba(142,68,173,0.06); border-radius: 10px;
+}
+.extended-mode-card {
+  background: white; border-radius: 14px; padding: 18px 22px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+  border-right: 4px solid #8e44ad;
+  margin-bottom: 12px;
+}
+.extended-mode-name { font-size: 0.95rem; font-weight: 600; color: #3d3530; }
+.extended-mode-name-en { font-size: 0.72rem; color: #9a8f87; }
+.extended-mode-meta {
+  display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0;
+}
+.extended-mode-field {
+  font-size: 0.85rem; color: #5a504a; line-height: 1.65; margin-top: 8px;
+}
+.extended-mode-field-label {
+  font-size: 0.78rem; font-weight: 600; color: #8e44ad; margin-bottom: 2px;
+}
 
 .chain-step-text {
   font-size: 0.88rem; color: #5a504a; line-height: 1.65;
@@ -399,6 +442,40 @@ body {
   border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;
   color: #c0392b; font-size: 0.9rem; line-height: 1.6;
 }
+
+/* ── Merge UI ── */
+.merge-bar {
+  background: linear-gradient(135deg, #e67e22, #f39c12);
+  border-radius: 12px; padding: 14px 20px;
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 16px; color: white;
+}
+.merge-bar-text { font-size: 0.95rem; font-weight: 500; }
+.merge-execute-btn {
+  background: white; color: #e67e22; border: none;
+  padding: 8px 22px; border-radius: 8px;
+  font-family: 'Heebo', sans-serif; font-size: 0.9rem;
+  font-weight: 600; cursor: pointer; transition: all 0.2s;
+}
+.merge-execute-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.merge-execute-btn:not(:disabled):hover { transform: scale(1.03); }
+.patient-card.merge-selectable { cursor: default; }
+.merge-check-label {
+  position: absolute; top: 14px; left: 14px; z-index: 2;
+}
+.merge-check { width: 20px; height: 20px; cursor: pointer; accent-color: #e67e22; }
+.patient-card { position: relative; }
+.patient-merged-info {
+  font-size: 0.78rem; color: #9a8f87; margin-bottom: 6px;
+  display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
+}
+.merged-source { background: rgba(230,126,34,0.08); padding: 2px 8px; border-radius: 4px; }
+.merged-source.primary { font-weight: 600; color: #e67e22; }
+.unmerge-btn {
+  background: none; border: none; cursor: pointer; color: #e74c3c;
+  font-size: 0.75rem; padding: 0 2px; vertical-align: middle;
+}
+.unmerge-btn:hover { color: #c0392b; }
 
 /* ── Responsive ── */
 @media (max-width: 768px) {

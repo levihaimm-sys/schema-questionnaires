@@ -5,7 +5,7 @@
   // CONFIG
   // ════════════════════════════════════════════
   const CONFIG = {
-    appsScriptUrl: 'https://script.google.com/macros/s/AKfycbxOUe28vIRZuv4bkOb-E9QvIE1_YMczw-zyjSCMrwbz1zO7PBRzLcY1uzNaH9arqXyhgQ/exec',
+    appsScriptUrl: 'https://script.google.com/macros/s/AKfycbyugUsQytnR1aE_FAJpwPRVYDa0o9HLpSHQZ2p-cbMP3UnSpZThQ6ISXNvHOVfrYs0wAQ/exec',
     dashboardToken: 'schema2024'
   };
 
@@ -72,7 +72,9 @@
     currentTab: 'overview',
     search: '',
     overrides: {},
-    notes: {}
+    notes: {},
+    aliases: {},    // { sourceName: targetName } – merged patient aliases
+    mergeMode: false
   };
 
   // ════════════════════════════════════════════
@@ -88,6 +90,7 @@
     state.authed = localStorage.getItem('dash_auth') === '1';
     try { state.overrides = JSON.parse(localStorage.getItem('dash_overrides') || '{}'); } catch(e) { state.overrides = {}; }
     try { state.notes = JSON.parse(localStorage.getItem('dash_notes') || '{}'); } catch(e) { state.notes = {}; }
+    try { state.aliases = JSON.parse(localStorage.getItem('dash_aliases') || '{}'); } catch(e) { state.aliases = {}; }
     if (state.authed) {
       state.view = 'patients';
       fetchPatients();
@@ -96,6 +99,63 @@
 
   function saveOverrides() { localStorage.setItem('dash_overrides', JSON.stringify(state.overrides)); }
   function saveNotes() { localStorage.setItem('dash_notes', JSON.stringify(state.notes)); }
+  function saveAliases() { localStorage.setItem('dash_aliases', JSON.stringify(state.aliases)); }
+
+  // ════════════════════════════════════════════
+  // PATIENT MERGE / ALIASES
+  // ════════════════════════════════════════════
+  // Get the canonical (target) name for a patient
+  function getCanonicalName(name) {
+    return state.aliases[name] || name;
+  }
+
+  // Get all names that are merged under a canonical name (including itself)
+  function getMergedNames(canonicalName) {
+    var names = [canonicalName];
+    Object.keys(state.aliases).forEach(function(src) {
+      if (state.aliases[src] === canonicalName) names.push(src);
+    });
+    return names;
+  }
+
+  // Merge sourceNames into targetName
+  function mergePatients(targetName, sourceNames) {
+    sourceNames.forEach(function(src) {
+      if (src !== targetName) state.aliases[src] = targetName;
+    });
+    saveAliases();
+  }
+
+  // Unmerge a source name
+  function unmergePatient(sourceName) {
+    delete state.aliases[sourceName];
+    saveAliases();
+  }
+
+  // Build a consolidated patient list grouped by canonical name
+  function getConsolidatedPatients() {
+    var consolidated = {};
+    Object.keys(state.patients).forEach(function(name) {
+      var canonical = getCanonicalName(name);
+      if (!consolidated[canonical]) {
+        consolidated[canonical] = { questionnaires: [], sourceNames: [] };
+      }
+      consolidated[canonical].sourceNames.push(name);
+      state.patients[name].questionnaires.forEach(function(q) {
+        // Avoid duplicates
+        var exists = consolidated[canonical].questionnaires.find(function(eq) {
+          return eq.name === q.name;
+        });
+        if (!exists) {
+          consolidated[canonical].questionnaires.push(q);
+        } else if (q.lastDate > exists.lastDate) {
+          exists.lastDate = q.lastDate;
+          exists.entries = q.entries;
+        }
+      });
+    });
+    return consolidated;
+  }
 
   function getOverride(patient, schemaId, field) {
     return state.overrides[patient] && state.overrides[patient][schemaId] && state.overrides[patient][schemaId][field];
@@ -153,11 +213,17 @@
     });
     var url = CONFIG.appsScriptUrl + '?' + qs;
 
+    // JSONP first – more reliable with Google Apps Script's 302 redirect
     try {
-      var res = await fetch(url);
-      return await res.json();
-    } catch(e) {
       return await fetchJsonp(url);
+    } catch(e) {
+      try {
+        var res = await fetch(url, { redirect: 'follow' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return await res.json();
+      } catch(e2) {
+        throw e;
+      }
     }
   }
 
@@ -190,9 +256,23 @@
     state.error = '';
     render();
     try {
-      var data = await fetchData('patient', { name: name });
-      if (data.error) throw new Error(data.error);
-      state.patientData = data;
+      // Fetch data for all merged names
+      var allNames = getMergedNames(name);
+      var combined = { name: name, questionnaires: {} };
+
+      for (var i = 0; i < allNames.length; i++) {
+        var data = await fetchData('patient', { name: allNames[i] });
+        if (data.error && data.error !== 'missing patient name') throw new Error(data.error);
+        if (data.questionnaires) {
+          Object.keys(data.questionnaires).forEach(function(qName) {
+            if (!combined.questionnaires[qName]) {
+              combined.questionnaires[qName] = data.questionnaires[qName];
+            }
+          });
+        }
+      }
+
+      state.patientData = combined;
     } catch(e) {
       state.error = 'שגיאה בטעינת נתוני מטופל.';
       state.patientData = null;
@@ -344,9 +424,12 @@
 
   // ── Patient List ──
   function renderPatients() {
-    var names = Object.keys(state.patients);
+    var consolidated = getConsolidatedPatients();
+    var names = Object.keys(consolidated);
     var filtered = state.search ?
       names.filter(function(n) { return n.includes(state.search); }) : names;
+
+    var mergeActive = state.mergeMode;
 
     var html =
       '<div class="dash-topbar">' +
@@ -362,8 +445,20 @@
       '<div class="dash-content">' +
         '<div class="dash-section-header">' +
           '<h2 class="dash-section-title">מטופלים</h2>' +
-          '<input type="text" class="dash-search" id="patient-search" placeholder="חיפוש מטופל..." value="' + escHtml(state.search) + '">' +
+          '<div style="display:flex;gap:8px;align-items:center">' +
+            '<input type="text" class="dash-search" id="patient-search" placeholder="חיפוש מטופל..." value="' + escHtml(state.search) + '">' +
+            '<button class="dash-topbar-btn' + (mergeActive ? ' merge-active' : '') + '" id="btn-merge-mode" style="white-space:nowrap;background:' + (mergeActive ? '#e67e22' : 'rgba(91,122,110,0.12)') + ';color:' + (mergeActive ? 'white' : '#5b7a6e') + ';border:none">' +
+              (mergeActive ? '&#10005; ביטול' : '&#128279; מיזוג') +
+            '</button>' +
+          '</div>' +
         '</div>';
+
+    if (mergeActive) {
+      html += '<div class="merge-bar" id="merge-bar">' +
+        '<div class="merge-bar-text">סמן 2 מטופלים או יותר ולחץ מזג</div>' +
+        '<button class="merge-execute-btn" id="btn-merge-execute" disabled>מזג נבחרים</button>' +
+      '</div>';
+    }
 
     if (state.loading) {
       html += '<div class="dash-loading"><div class="dash-loading-spinner"></div>טוען נתונים...</div>';
@@ -381,7 +476,7 @@
     } else {
       html += '<div class="patient-grid">';
       filtered.forEach(function(name) {
-        html += buildPatientCard(name);
+        html += buildPatientCard(name, consolidated[name], mergeActive);
       });
       html += '</div>';
     }
@@ -392,6 +487,10 @@
     // Event listeners
     document.getElementById('btn-refresh').addEventListener('click', fetchPatients);
     document.getElementById('btn-logout').addEventListener('click', logout);
+    document.getElementById('btn-merge-mode').addEventListener('click', function() {
+      state.mergeMode = !state.mergeMode;
+      renderPatients();
+    });
     document.getElementById('patient-search').addEventListener('input', function(e) {
       state.search = e.target.value;
       renderPatients();
@@ -399,30 +498,95 @@
       if (el) { el.focus(); el.selectionStart = el.selectionEnd = el.value.length; }
     });
 
-    // Patient card clicks
-    document.querySelectorAll('.patient-card').forEach(function(card) {
-      card.addEventListener('click', function() {
-        selectPatient(card.dataset.name);
+    if (mergeActive) {
+      // Merge checkboxes
+      document.querySelectorAll('.merge-check').forEach(function(cb) {
+        cb.addEventListener('change', updateMergeBar);
       });
-    });
+      // Unmerge buttons
+      document.querySelectorAll('.unmerge-btn').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          unmergePatient(btn.dataset.source);
+          renderPatients();
+        });
+      });
+      // Execute merge
+      var execBtn = document.getElementById('btn-merge-execute');
+      if (execBtn) {
+        execBtn.addEventListener('click', executeMerge);
+      }
+    }
+
+    // Patient card clicks (not in merge mode)
+    if (!mergeActive) {
+      document.querySelectorAll('.patient-card').forEach(function(card) {
+        card.addEventListener('click', function() {
+          selectPatient(card.dataset.name);
+        });
+      });
+    }
   }
 
-  function buildPatientCard(name) {
-    var patient = state.patients[name];
+  function updateMergeBar() {
+    var checked = document.querySelectorAll('.merge-check:checked');
+    var btn = document.getElementById('btn-merge-execute');
+    if (btn) btn.disabled = checked.length < 2;
+    var text = document.querySelector('.merge-bar-text');
+    if (text) text.textContent = checked.length < 2 ?
+      'סמן 2 מטופלים או יותר ולחץ מזג' :
+      checked.length + ' מטופלים נבחרו';
+  }
+
+  function executeMerge() {
+    var checked = document.querySelectorAll('.merge-check:checked');
+    if (checked.length < 2) return;
+    var names = [];
+    checked.forEach(function(cb) { names.push(cb.dataset.name); });
+
+    // Show name picker
+    var pick = prompt('בחר את השם שישמר (הקלד מספר):\n' +
+      names.map(function(n, i) { return (i + 1) + '. ' + n; }).join('\n'));
+
+    var idx = parseInt(pick, 10) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= names.length) return;
+
+    var target = names[idx];
+    mergePatients(target, names);
+    state.mergeMode = false;
+    renderPatients();
+  }
+
+  function buildPatientCard(name, consolidated, mergeActive) {
     var qTypes = ['YPI', 'YSQ', 'SMI', 'YPSQ'];
     var badges = '';
     qTypes.forEach(function(type) {
-      var found = patient.questionnaires.find(function(q) { return q.name.includes(type); });
+      var found = consolidated.questionnaires.find(function(q) { return q.name.includes(type); });
       badges += found ?
         '<span class="patient-badge done">' + type + ' &#10003;</span>' :
         '<span class="patient-badge missing">' + type + '</span>';
     });
 
-    var dates = patient.questionnaires.map(function(q) { return q.lastDate; }).filter(Boolean);
+    var dates = consolidated.questionnaires.map(function(q) { return q.lastDate; }).filter(Boolean);
     var lastDate = dates.length > 0 ? dates[dates.length - 1] : '';
 
-    return '<div class="patient-card" data-name="' + escHtml(name) + '">' +
+    // Show merged source names
+    var mergedInfo = '';
+    if (consolidated.sourceNames.length > 1) {
+      mergedInfo = '<div class="patient-merged-info">&#128279; מאוחד מ: ' +
+        consolidated.sourceNames.map(function(sn) {
+          var isSelf = sn === name;
+          return '<span class="merged-source' + (isSelf ? ' primary' : '') + '">' + escHtml(sn) +
+            (!isSelf && mergeActive ? ' <button class="unmerge-btn" data-source="' + escHtml(sn) + '" title="בטל מיזוג">&#10005;</button>' : '') +
+          '</span>';
+        }).join(', ') +
+      '</div>';
+    }
+
+    return '<div class="patient-card' + (mergeActive ? ' merge-selectable' : '') + '" data-name="' + escHtml(name) + '">' +
+      (mergeActive ? '<label class="merge-check-label"><input type="checkbox" class="merge-check" data-name="' + escHtml(name) + '"></label>' : '') +
       '<div class="patient-name">' + escHtml(name) + '</div>' +
+      mergedInfo +
       (lastDate ? '<div class="patient-date">עדכון אחרון: ' + escHtml(lastDate) + '</div>' : '') +
       '<div class="patient-badges">' + badges + '</div>' +
     '</div>';
@@ -618,10 +782,16 @@
 
     // Get override or original values
     function val(field) {
-      return getOverride(name, schema.id, field) || schema[field];
+      return getOverride(name, schema.id, field) || schema[field] || '';
     }
     function isModified(field) {
       return !!getOverride(name, schema.id, field);
+    }
+
+    function fffBadge(mode) {
+      if (!mode || !mode.fff) return '';
+      var cls = mode.fff.toLowerCase();
+      return '<span class="chain-fff-badge ' + cls + '">' + escHtml(mode.fff) + '</span>';
     }
 
     var html = '<div class="chain-card" data-schema="' + schema.id + '">' +
@@ -667,7 +837,40 @@
       '</div>' +
     '</div>';
 
-    // Step 3: Related Modes
+    // Step 3: Core Belief
+    if (val('coreBelief')) {
+      html += '<div class="chain-step">' +
+        '<div class="chain-step-dot belief"></div>' +
+        '<div class="chain-step-label belief">אמונה גרעינית</div>' +
+        '<div class="chain-step-text' + (isModified('coreBelief') ? ' modified' : '') + '" contenteditable="true" data-field="coreBelief" data-schema="' + schema.id + '">' +
+          escHtml(val('coreBelief')) +
+        '</div>' +
+      '</div>';
+    }
+
+    // Step 4: Triggers
+    if (val('triggers')) {
+      html += '<div class="chain-step">' +
+        '<div class="chain-step-dot triggers"></div>' +
+        '<div class="chain-step-label triggers">טריגרים בהווה</div>' +
+        '<div class="chain-step-text' + (isModified('triggers') ? ' modified' : '') + '" contenteditable="true" data-field="triggers" data-schema="' + schema.id + '">' +
+          escHtml(val('triggers')) +
+        '</div>' +
+      '</div>';
+    }
+
+    // Step 5: Body Experience
+    if (val('bodyExperience')) {
+      html += '<div class="chain-step">' +
+        '<div class="chain-step-dot body"></div>' +
+        '<div class="chain-step-label body">חוויה גופנית-רגשית</div>' +
+        '<div class="chain-step-text' + (isModified('bodyExperience') ? ' modified' : '') + '" contenteditable="true" data-field="bodyExperience" data-schema="' + schema.id + '">' +
+          escHtml(val('bodyExperience')) +
+        '</div>' +
+      '</div>';
+    }
+
+    // Step 6: Related Modes (with FFF badges)
     html += '<div class="chain-step">' +
       '<div class="chain-step-dot modes"></div>' +
       '<div class="chain-step-label modes">מודים קשורים</div>' +
@@ -678,6 +881,7 @@
       if (!mode) return;
       var modeScore = smiData ? smiData.items[mode.name] : null;
       html += '<span class="chain-mode-badge ' + mode.type + '">' +
+        fffBadge(mode) +
         escHtml(mode.name) +
         (modeScore !== null && modeScore !== undefined ?
           ' <span class="chain-mode-score">' + modeScore.toFixed(1) + '</span>' : '') +
@@ -686,7 +890,7 @@
 
     html += '</div></div>';
 
-    // Step 4: Positive Schema
+    // Step 7: Positive Schema
     html += '<div class="chain-step">' +
       '<div class="chain-step-dot positive"></div>' +
       '<div class="chain-step-label positive">קוטב חיובי</div>' +
@@ -704,7 +908,7 @@
     }
     html += '</div>';
 
-    // Step 5: Corrective Response
+    // Step 8: Corrective Response
     html += '<div class="chain-step">' +
       '<div class="chain-step-dot corrective"></div>' +
       '<div class="chain-step-label corrective">תגובה מתקנת</div>' +
@@ -712,6 +916,17 @@
         escHtml(val('correctiveResponse')) +
       '</div>' +
     '</div>';
+
+    // Step 9: Therapy Goal
+    if (val('therapyGoal')) {
+      html += '<div class="chain-step">' +
+        '<div class="chain-step-dot goal"></div>' +
+        '<div class="chain-step-label goal">יעד הבוגר הבריא</div>' +
+        '<div class="chain-step-text' + (isModified('therapyGoal') ? ' modified' : '') + '" contenteditable="true" data-field="therapyGoal" data-schema="' + schema.id + '">' +
+          escHtml(val('therapyGoal')) +
+        '</div>' +
+      '</div>';
+    }
 
     // Therapist note for this schema
     var noteVal = getNote(name, schema.id);
