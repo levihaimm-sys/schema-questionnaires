@@ -791,6 +791,7 @@
     var isDual = !!qData.dualRating;
     var isCountHigh = qData.scoring && qData.scoring.method === 'countHigh';
     var highThreshold = qData.scoring ? (qData.scoring.highThreshold || 5) : 5;
+    var hasAnswers = Object.keys(answers).length > 0;
 
     var html = '<div class="qdetail-container">';
 
@@ -800,6 +801,14 @@
     html += '<h2 class="qdetail-title">' + escHtml(qData.title) + '</h2>';
     if (raw.date) html += '<div class="qdetail-date">תאריך מילוי: ' + escHtml(raw.date) + '</div>';
     html += '</div>';
+
+    // Notice when answers aren't available
+    if (!hasAnswers) {
+      html += '<div class="qdetail-no-answers">' +
+        '&#9432; התשובות המפורטות אינן זמינות עבור שאלון זה. ' +
+        'הציונים הכלליים לכל סכמה מוצגים. כשהמטופל ימלא את השאלון שוב, התשובות לכל שאלה יוצגו כאן.' +
+      '</div>';
+    }
 
     // Iterate schemas
     qData.schemas.forEach(function(schema) {
@@ -844,33 +853,61 @@
       if (schemaScore) html += '<span class="qdetail-schema-score ' + schemaClass + '">' + schemaScore + '</span>';
       html += '</div>';
 
-      // Questions list
-      html += '<div class="qdetail-questions">';
-      schema.items.forEach(function(itemNum) {
-        var question = qData.questions.find(function(q) {
-          return (q.number || q.num || q.id) === itemNum;
+      if (isDual) {
+        // YPI: grouped by parent — first all mom, then all dad
+        var parents = [
+          { key: 'first', label: 'אמא', cls: 'mom' },
+          { key: 'second', label: 'אבא', cls: 'dad' }
+        ];
+
+        // Get parent-level score for this schema
+        var parentScores = parsed && parsed.items ? parsed.items[schemaName] : null;
+
+        html += '<div class="qdetail-parents-grid">';
+        parents.forEach(function(parent) {
+          var parentAvg = parentScores ? (parent.key === 'first' ? parentScores.mother : parentScores.father) : null;
+          var parentAvgClass = parentAvg && parentAvg >= 4.5 ? 'high' : parentAvg && parentAvg >= 3.5 ? 'moderate' : '';
+
+          html += '<div class="qdetail-parent-block ' + parent.cls + '">';
+          html += '<div class="qdetail-parent-header ' + parent.cls + '">';
+          html += '<span class="qdetail-parent-label">' + parent.label + '</span>';
+          if (parentAvg !== null) html += '<span class="qdetail-parent-avg ' + parentAvgClass + '">' + parentAvg.toFixed(1) + '</span>';
+          html += '</div>';
+
+          html += '<div class="qdetail-questions">';
+          schema.items.forEach(function(itemNum) {
+            var question = qData.questions.find(function(q) {
+              return (q.number || q.num || q.id) === itemNum;
+            });
+            if (!question) return;
+
+            var answer = answers[itemNum];
+            var val = answer && answer[parent.key] ? answer[parent.key] : null;
+            var valClass = val && val >= 5 ? 'high' : val && val >= 4 ? 'moderate' : '';
+
+            html += '<div class="qdetail-question' + (val && val >= 5 ? ' high-answer' : '') + '">';
+            html += '<span class="qdetail-q-num">' + itemNum + '.</span>';
+            html += '<span class="qdetail-q-text">' + escHtml(question.text) + '</span>';
+            html += '<span class="qdetail-q-val ' + parent.cls + ' ' + valClass + '">' + (val || '-') + '</span>';
+            html += '</div>';
+          });
+          html += '</div>';
+
+          html += '</div>';
         });
-        if (!question) return;
+        html += '</div>';
+      } else {
+        // Single rating: YSQ, SMI, YPSQ
+        html += '<div class="qdetail-questions">';
+        schema.items.forEach(function(itemNum) {
+          var question = qData.questions.find(function(q) {
+            return (q.number || q.num || q.id) === itemNum;
+          });
+          if (!question) return;
 
-        var qText = question.text;
-        var answer = answers[itemNum];
-        var isReversed = reverseItems.includes(itemNum);
-
-        if (isDual) {
-          var momVal = answer && answer.first ? answer.first : null;
-          var dadVal = answer && answer.second ? answer.second : null;
-          var momClass = momVal && momVal >= 5 ? 'high' : momVal && momVal >= 4 ? 'moderate' : '';
-          var dadClass = dadVal && dadVal >= 5 ? 'high' : dadVal && dadVal >= 4 ? 'moderate' : '';
-
-          html += '<div class="qdetail-question">';
-          html += '<span class="qdetail-q-num">' + itemNum + '.</span>';
-          html += '<span class="qdetail-q-text">' + escHtml(qText) + '</span>';
-          html += '<div class="qdetail-q-dual">';
-          html += '<span class="qdetail-q-val mom ' + momClass + '">אמא: ' + (momVal || '-') + '</span>';
-          html += '<span class="qdetail-q-val dad ' + dadClass + '">אבא: ' + (dadVal || '-') + '</span>';
-          html += '</div>';
-          html += '</div>';
-        } else {
+          var qText = question.text;
+          var answer = answers[itemNum];
+          var isReversed = reverseItems.includes(itemNum);
           var val = typeof answer === 'number' ? answer : (answer != null ? parseInt(answer) : null);
           var valClass = '';
           var isHigh = false;
@@ -890,9 +927,9 @@
           html += '<span class="qdetail-q-val ' + valClass + '">' + (val !== null && !isNaN(val) ? val : '-') + '</span>';
           if (isReversed) html += '<span class="qdetail-q-reversed" title="פריט הפוך (הציון מתהפך בחישוב)">&#8635;</span>';
           html += '</div>';
-        }
-      });
-      html += '</div>';
+        });
+        html += '</div>';
+      }
 
       html += '</div>';
     });
