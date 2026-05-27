@@ -725,8 +725,8 @@
           html += '<div class="overview-row">' +
             '<span class="overview-row-name">' + escHtml(name) + '</span>' +
             '<div class="overview-dual-vals">' +
-              '<span class="overview-dual-val mom" title="אמא">' + scores.mother.toFixed(1) + '</span>' +
-              '<span class="overview-dual-val dad" title="אבא">' + scores.father.toFixed(1) + '</span>' +
+              '<span class="overview-dual-val mom">אמא ' + scores.mother.toFixed(1) + '</span>' +
+              '<span class="overview-dual-val dad">אבא ' + scores.father.toFixed(1) + '</span>' +
             '</div>' +
           '</div>';
         } else {
