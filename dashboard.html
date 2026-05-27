@@ -9,6 +9,16 @@
 <body>
     <div id="dashboard-app"></div>
     <script src="data/clinical-map.js"></script>
+    <!-- Load all questionnaire data for detail views -->
+    <script>window._QDATA = {};</script>
+    <script src="data/ysq.js"></script>
+    <script>window._QDATA.ysq = window.QUESTIONNAIRE_DATA;</script>
+    <script src="data/ypi.js"></script>
+    <script>window._QDATA.ypi = window.QUESTIONNAIRE_DATA;</script>
+    <script src="data/smi.js"></script>
+    <script>window._QDATA.smi = window.QUESTIONNAIRE_DATA;</script>
+    <script src="data/ypsq.js"></script>
+    <script>window._QDATA.ypsq = window.QUESTIONNAIRE_DATA; window.QUESTIONNAIRE_DATA = null;</script>
     <script src="dashboard.js"></script>
 </body>
 </html>

@@ -235,7 +235,8 @@ document.addEventListener('DOMContentLoaded', () => {
       name: state.name,
       questionnaire: data.title,
       date: new Date().toISOString(),
-      results: enrichedResults
+      results: enrichedResults,
+      answers: state.answers
     };
     fetch(APPS_SCRIPT_URL, {
       method: 'POST',

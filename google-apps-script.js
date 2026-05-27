@@ -72,6 +72,22 @@ function saveToSheet(data) {
   }
 
   sheet.appendRow(row);
+
+  // Save raw answers in a dedicated answers sheet
+  if (data.answers) {
+    const answersSheetName = data.name + ' - ' + data.questionnaire + ' - תשובות';
+    let answersSheet = ss.getSheetByName(answersSheetName);
+    if (!answersSheet) {
+      answersSheet = ss.insertSheet(answersSheetName);
+      answersSheet.appendRow(['תאריך', 'answers_json']);
+      answersSheet.getRange(1, 1, 1, 2).setFontWeight('bold');
+      answersSheet.setRightToLeft(true);
+    }
+    answersSheet.appendRow([
+      new Date().toLocaleDateString('he-IL'),
+      JSON.stringify(data.answers)
+    ]);
+  }
 }
 
 function sendEmail(data) {
@@ -282,7 +298,11 @@ function getPatientData(patientName) {
     const name = sheet.getName();
     if (!name.startsWith(prefix)) return;
 
-    const questionnaire = name.substring(prefix.length).trim();
+    const rest = name.substring(prefix.length).trim();
+    // Skip answers sheets
+    if (rest.endsWith(' - תשובות')) return;
+
+    const questionnaire = rest;
     const lastRow = sheet.getLastRow();
     const lastCol = sheet.getLastColumn();
     if (lastRow < 2 || lastCol < 1) return;
@@ -295,6 +315,19 @@ function getPatientData(patientName) {
       scores: latestRow,
       date: latestRow[0] ? latestRow[0].toString() : ''
     };
+
+    // Try to get raw answers from companion answers sheet
+    const answersSheetName = patientName + ' - ' + questionnaire + ' - תשובות';
+    const answersSheet = ss.getSheetByName(answersSheetName);
+    if (answersSheet && answersSheet.getLastRow() >= 2) {
+      const answersLastRow = answersSheet.getLastRow();
+      const answersJson = answersSheet.getRange(answersLastRow, 2).getValue();
+      if (answersJson) {
+        try {
+          data.questionnaires[questionnaire].answers = JSON.parse(answersJson);
+        } catch(e) { /* ignore parse errors */ }
+      }
+    }
   });
 
   return data;

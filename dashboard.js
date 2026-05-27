@@ -74,7 +74,8 @@
     overrides: {},
     notes: {},
     aliases: {},    // { sourceName: targetName } – merged patient aliases
-    mergeMode: false
+    mergeMode: false,
+    detailQuestionnaire: null  // which questionnaire detail view is open (null = overview)
   };
 
   // ════════════════════════════════════════════
@@ -273,6 +274,7 @@
   async function selectPatient(name) {
     state.currentPatient = name;
     state.currentTab = 'overview';
+    state.detailQuestionnaire = null;
     state.view = 'detail';
     state.loading = true;
     state.error = '';
@@ -356,6 +358,16 @@
     var d = document.createElement('div');
     d.textContent = s;
     return d.innerHTML;
+  }
+
+  // Get raw answers object for a questionnaire type
+  function getRawAnswers(type) {
+    if (!state.patientData || !state.patientData.questionnaires) return null;
+    var qName = Object.keys(state.patientData.questionnaires).find(function(k) {
+      return getQType(k) === type;
+    });
+    if (!qName) return null;
+    return state.patientData.questionnaires[qName].answers || null;
   }
 
   // Parse patient data from sheet into structured scores
@@ -643,7 +655,7 @@
       html += '<div class="dash-error">' + escHtml(state.error) + '</div>';
     } else {
       switch (state.currentTab) {
-        case 'overview': html += renderOverview(); break;
+        case 'overview': html += state.detailQuestionnaire ? renderQuestionnaireDetail(state.detailQuestionnaire) : renderOverview(); break;
         case 'chain': html += renderChain(); break;
         case 'notes': html += renderNotes(); break;
       }
@@ -661,12 +673,14 @@
     document.querySelectorAll('.tab-btn').forEach(function(btn) {
       btn.addEventListener('click', function() {
         state.currentTab = btn.dataset.tab;
+        state.detailQuestionnaire = null;
         renderDetail();
       });
     });
 
     // Tab-specific event binding
     if (!state.loading && !state.error) {
+      if (state.currentTab === 'overview') bindOverviewEvents();
       if (state.currentTab === 'chain') bindChainEvents();
       if (state.currentTab === 'notes') bindNotesEvents();
     }
@@ -676,6 +690,7 @@
     state.view = 'patients';
     state.patientData = null;
     state.error = '';
+    state.detailQuestionnaire = null;
     render();
   }
 
@@ -694,7 +709,7 @@
     order.forEach(function(type) {
       var data = parsed[type];
       html += '<div class="overview-card">';
-      html += '<div class="overview-q-title">' + labels[type] + '</div>';
+      html += '<div class="overview-q-title' + (data ? ' clickable' : '') + '" data-qtype="' + type + '">' + labels[type] + (data ? ' &#8592;' : '') + '</div>';
 
       if (!data) {
         html += '<div class="overview-q-empty">טרם מולא</div>';
@@ -747,6 +762,163 @@
 
     html += '</div>';
     return html;
+  }
+
+  // ── Questionnaire Detail View ──
+  function renderQuestionnaireDetail(type) {
+    var QDATA = window._QDATA;
+    if (!QDATA || !QDATA[type]) {
+      return '<div class="dash-empty"><h3>אין נתוני שאלון זמינים</h3></div>';
+    }
+
+    var qData = QDATA[type];
+    var qName = null;
+
+    if (state.patientData && state.patientData.questionnaires) {
+      qName = Object.keys(state.patientData.questionnaires).find(function(k) {
+        return getQType(k) === type;
+      });
+    }
+
+    if (!qName || !state.patientData.questionnaires[qName]) {
+      return '<div class="dash-empty"><h3>המטופל טרם מילא שאלון זה</h3></div>';
+    }
+
+    var raw = state.patientData.questionnaires[qName];
+    var answers = raw.answers || {};
+    var parsed = parseQData(qName, raw);
+    var reverseItems = (qData.scoring && qData.scoring.reverseItems) || [];
+    var isDual = !!qData.dualRating;
+    var isCountHigh = qData.scoring && qData.scoring.method === 'countHigh';
+    var highThreshold = qData.scoring ? (qData.scoring.highThreshold || 5) : 5;
+
+    var html = '<div class="qdetail-container">';
+
+    // Header with back button
+    html += '<div class="qdetail-header">';
+    html += '<button class="qdetail-back" id="qdetail-back">&#8594; חזרה לסקירה</button>';
+    html += '<h2 class="qdetail-title">' + escHtml(qData.title) + '</h2>';
+    if (raw.date) html += '<div class="qdetail-date">תאריך מילוי: ' + escHtml(raw.date) + '</div>';
+    html += '</div>';
+
+    // Iterate schemas
+    qData.schemas.forEach(function(schema) {
+      var schemaName = schema.name;
+      var schemaScore = '';
+      var schemaClass = '';
+
+      if (parsed && parsed.items) {
+        if (isDual) {
+          var sc = parsed.items[schemaName];
+          if (sc) {
+            schemaScore = 'אמא: ' + sc.mother.toFixed(1) + ' | אבא: ' + sc.father.toFixed(1);
+            var maxDual = Math.max(sc.mother, sc.father);
+            if (maxDual >= 4.5) schemaClass = 'high';
+            else if (maxDual >= 3.5) schemaClass = 'moderate';
+          }
+        } else {
+          var s = parsed.items[schemaName];
+          if (s !== undefined) {
+            if (isCountHigh) {
+              var activeThreshold = qData.scoring.activeThreshold || 2;
+              schemaScore = s + '/' + schema.items.length + ' תשובות גבוהות';
+              if (s >= activeThreshold) {
+                schemaClass = 'active';
+                schemaScore += ' — אקטיבית';
+              }
+            } else {
+              schemaScore = 'ממוצע: ' + (Number.isInteger(s) ? s : s.toFixed(1));
+              if (s >= 4.5) schemaClass = 'high';
+              else if (s >= 3.5) schemaClass = 'moderate';
+            }
+          }
+        }
+      }
+
+      html += '<div class="qdetail-schema ' + schemaClass + '">';
+      html += '<div class="qdetail-schema-header">';
+      html += '<div class="qdetail-schema-title">';
+      html += '<span class="qdetail-schema-name">' + escHtml(schemaName) + '</span>';
+      if (schema.nameEn) html += ' <span class="qdetail-schema-name-en">(' + escHtml(schema.nameEn) + ')</span>';
+      html += '</div>';
+      if (schemaScore) html += '<span class="qdetail-schema-score ' + schemaClass + '">' + schemaScore + '</span>';
+      html += '</div>';
+
+      // Questions list
+      html += '<div class="qdetail-questions">';
+      schema.items.forEach(function(itemNum) {
+        var question = qData.questions.find(function(q) {
+          return (q.number || q.num || q.id) === itemNum;
+        });
+        if (!question) return;
+
+        var qText = question.text;
+        var answer = answers[itemNum];
+        var isReversed = reverseItems.includes(itemNum);
+
+        if (isDual) {
+          var momVal = answer && answer.first ? answer.first : null;
+          var dadVal = answer && answer.second ? answer.second : null;
+          var momClass = momVal && momVal >= 5 ? 'high' : momVal && momVal >= 4 ? 'moderate' : '';
+          var dadClass = dadVal && dadVal >= 5 ? 'high' : dadVal && dadVal >= 4 ? 'moderate' : '';
+
+          html += '<div class="qdetail-question">';
+          html += '<span class="qdetail-q-num">' + itemNum + '.</span>';
+          html += '<span class="qdetail-q-text">' + escHtml(qText) + '</span>';
+          html += '<div class="qdetail-q-dual">';
+          html += '<span class="qdetail-q-val mom ' + momClass + '">אמא: ' + (momVal || '-') + '</span>';
+          html += '<span class="qdetail-q-val dad ' + dadClass + '">אבא: ' + (dadVal || '-') + '</span>';
+          html += '</div>';
+          html += '</div>';
+        } else {
+          var val = typeof answer === 'number' ? answer : (answer != null ? parseInt(answer) : null);
+          var valClass = '';
+          var isHigh = false;
+          if (val !== null && !isNaN(val)) {
+            if (isCountHigh) {
+              isHigh = val >= highThreshold;
+              if (isHigh) valClass = 'high';
+            } else {
+              if (val >= 5) { valClass = 'high'; isHigh = true; }
+              else if (val >= 4) valClass = 'moderate';
+            }
+          }
+
+          html += '<div class="qdetail-question' + (isHigh ? ' high-answer' : '') + '">';
+          html += '<span class="qdetail-q-num">' + itemNum + '.</span>';
+          html += '<span class="qdetail-q-text">' + escHtml(qText) + '</span>';
+          html += '<span class="qdetail-q-val ' + valClass + '">' + (val !== null && !isNaN(val) ? val : '-') + '</span>';
+          if (isReversed) html += '<span class="qdetail-q-reversed" title="פריט הפוך (הציון מתהפך בחישוב)">&#8635;</span>';
+          html += '</div>';
+        }
+      });
+      html += '</div>';
+
+      html += '</div>';
+    });
+
+    html += '</div>';
+    return html;
+  }
+
+  // ── Overview Event Bindings ──
+  function bindOverviewEvents() {
+    // Clickable questionnaire titles → open detail view
+    document.querySelectorAll('.overview-q-title.clickable').forEach(function(el) {
+      el.addEventListener('click', function() {
+        state.detailQuestionnaire = el.dataset.qtype;
+        renderDetail();
+      });
+    });
+
+    // Back button from detail view
+    var backBtn = document.getElementById('qdetail-back');
+    if (backBtn) {
+      backBtn.addEventListener('click', function() {
+        state.detailQuestionnaire = null;
+        renderDetail();
+      });
+    }
   }
 
   // ── Chain Tab ──
@@ -866,8 +1038,37 @@
         '<div class="chain-step-label belief">אמונה גרעינית</div>' +
         '<div class="chain-step-text' + (isModified('coreBelief') ? ' modified' : '') + '" contenteditable="true" data-field="coreBelief" data-schema="' + schema.id + '">' +
           escHtml(val('coreBelief')) +
-        '</div>' +
-      '</div>';
+        '</div>';
+
+      // Show high-scoring YSQ items (5-6) for active/moderate schemas
+      if (level === 'active' || level === 'moderate') {
+        var ysqAnswers = getRawAnswers('ysq');
+        var ysqQData = window._QDATA && window._QDATA.ysq;
+        if (ysqAnswers && ysqQData && schema.ysqItems) {
+          var highItems = [];
+          schema.ysqItems.forEach(function(itemNum) {
+            var ans = ysqAnswers[itemNum];
+            var ansVal = typeof ans === 'number' ? ans : (ans != null ? parseInt(ans) : 0);
+            if (ansVal >= 5) {
+              var q = ysqQData.questions.find(function(qq) { return qq.number === itemNum; });
+              if (q) highItems.push({ num: itemNum, text: q.text, score: ansVal });
+            }
+          });
+          if (highItems.length > 0) {
+            html += '<div class="chain-high-items">';
+            html += '<div class="chain-high-items-label">&#128293; משפטים שהפעילו את הסכמה (ציון 5-6):</div>';
+            highItems.forEach(function(item) {
+              html += '<div class="chain-high-item">';
+              html += '<span class="chain-high-item-score">' + item.score + '</span>';
+              html += '<span class="chain-high-item-text">"' + escHtml(item.text) + '"</span>';
+              html += '</div>';
+            });
+            html += '</div>';
+          }
+        }
+      }
+
+      html += '</div>';
     }
 
     // Step 4: Triggers
