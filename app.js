@@ -2,7 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const data = window.QUESTIONNAIRE_DATA;
   if (!data) return;
 
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyFY9hUzONyChF4eJ92J1FgvB9CfhR7hK74puwBcMyifZhaxZbEi84DUVGjJtUsmfdidA/exec';
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwsDI5Vtzm5XwvbDOodC9LRMAl-Y_CbnLzX1HHAp0kvTch4_ztS81nl52HUt0k-qlgMKQ/exec';
 
   const app = document.getElementById('app');
   const state = { answers: {}, name: '' };
@@ -298,10 +298,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let level = 'average';
         let levelText = 'ממוצע';
-        if (schema.norms) {
-          if (rounded >= schema.norms.very_high) { level = 'high'; levelText = 'גבוה מאוד'; }
-          else if (rounded >= schema.norms.high) { level = 'high'; levelText = 'גבוה'; }
-          else if (rounded >= schema.norms.moderate) { level = 'moderate'; levelText = 'בינוני'; }
+        const norms = schema.norms || scoring.defaultNorms;
+        if (norms) {
+          if (norms.very_high && rounded >= norms.very_high) { level = 'high'; levelText = 'גבוה מאוד'; }
+          else if (norms.high && rounded >= norms.high) { level = 'high'; levelText = 'גבוה'; }
+          else if (norms.moderate && rounded >= norms.moderate) { level = 'moderate'; levelText = 'בינוני'; }
           else { level = 'low'; levelText = 'ממוצע / נמוך'; }
         }
 

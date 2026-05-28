@@ -469,6 +469,26 @@
         result.items[headers[j]] = parseFloat(scores[j]) || 0;
       }
     }
+
+    // YSQ: always recalculate averages from raw answers to fix legacy countHigh data
+    if (type === 'ysq' && raw.answers) {
+      var ysqQData = window._QDATA && window._QDATA.ysq;
+      if (ysqQData && ysqQData.schemas) {
+        ysqQData.schemas.forEach(function(schema) {
+          var sum = 0, count = 0;
+          schema.items.forEach(function(itemNum) {
+            var key = String(itemNum);
+            var ans = raw.answers[key] !== undefined ? raw.answers[key] : raw.answers[itemNum];
+            var val = parseFloat(ans);
+            if (!isNaN(val) && val > 0) { sum += val; count++; }
+          });
+          if (count > 0) {
+            result.items[schema.name] = Math.round((sum / count) * 100) / 100;
+          }
+        });
+      }
+    }
+
     return result;
   }
 

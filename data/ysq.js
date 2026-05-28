@@ -14,7 +14,7 @@ window.QUESTIONNAIRE_DATA = {
     6: 'מתאר אותי בצורה מושלמת'
   },
   scaleAnchors: { low: 'לא נכון לגביי', high: 'מתאר אותי מאוד' },
-  scoring: { method: 'countHigh', highThreshold: 5, activeThreshold: 2 },
+  scoring: { method: 'average', defaultNorms: { moderate: 2, high: 3, very_high: 4.5 } },
   questions: [
     { number: 1, text: 'אנשים לא היו שם כדי למלא את הצרכים הרגשיים שלי.' },
     { number: 2, text: 'לא קיבלתי תשומת לב ואהבה.' },
