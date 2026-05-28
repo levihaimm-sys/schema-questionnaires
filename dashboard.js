@@ -5,7 +5,7 @@
   // CONFIG
   // ════════════════════════════════════════════
   const CONFIG = {
-    appsScriptUrl: 'https://script.google.com/macros/s/AKfycbyFY9hUzONyChF4eJ92J1FgvB9CfhR7hK74puwBcMyifZhaxZbEi84DUVGjJtUsmfdidA/exec',
+    appsScriptUrl: 'https://script.google.com/macros/s/AKfycbwsDI5Vtzm5XwvbDOodC9LRMAl-Y_CbnLzX1HHAp0kvTch4_ztS81nl52HUt0k-qlgMKQ/exec',
     dashboardToken: 'schema2024'
   };
 
@@ -360,6 +360,78 @@
     return d.innerHTML;
   }
 
+  // Get top N highest-scoring items for display in clinical chain
+  function getTopItems(type, itemNums, count, opts) {
+    if (!itemNums || itemNums.length === 0) return [];
+    var answers = getRawAnswers(type);
+    var qData = window._QDATA && window._QDATA[type];
+    if (!answers || !qData) return [];
+    opts = opts || {};
+
+    var scored = [];
+    itemNums.forEach(function(itemNum) {
+      var key = String(itemNum);
+      var ans = answers[key] !== undefined ? answers[key] : answers[itemNum];
+      if (ans === undefined || ans === null) return;
+
+      if (type === 'ypi') {
+        var first = 0, second = 0;
+        if (typeof ans === 'object') {
+          first = parseFloat(ans.first || 0);
+          second = parseFloat(ans.second || 0);
+        }
+        var q = qData.questions.find(function(qq) { return qq.id === itemNum; });
+        if (!q) return;
+        // For reversed schemas (ED), low raw scores = more problematic
+        var effFirst = opts.reversed ? (7 - first) : first;
+        var effSecond = opts.reversed ? (7 - second) : second;
+        scored.push({ num: itemNum, text: q.text, first: first, second: second,
+                      effMax: Math.max(effFirst, effSecond) });
+      } else if (type === 'smi') {
+        var raw = typeof ans === 'number' ? ans : parseFloat(ans) || 0;
+        var q = qData.questions.find(function(qq) { return qq.num === itemNum; });
+        if (!q) return;
+        scored.push({ num: itemNum, text: q.text, score: raw });
+      } else {
+        // YSQ or YPSQ - both use q.number
+        var val = typeof ans === 'number' ? ans : parseFloat(ans) || 0;
+        var q = qData.questions.find(function(qq) { return qq.number === itemNum; });
+        if (!q) return;
+        scored.push({ num: itemNum, text: q.text, score: val });
+      }
+    });
+
+    // Sort by clinical relevance descending
+    if (type === 'ypi') {
+      scored.sort(function(a, b) { return b.effMax - a.effMax; });
+    } else {
+      scored.sort(function(a, b) { return b.score - a.score; });
+    }
+
+    return scored.slice(0, count);
+  }
+
+  function renderTopItems(items, type, label) {
+    if (!items || items.length === 0) return '';
+    var html = '<div class="chain-high-items">';
+    html += '<div class="chain-high-items-label">' + label + '</div>';
+    items.forEach(function(item) {
+      html += '<div class="chain-high-item">';
+      if (type === 'ypi') {
+        html += '<span class="chain-high-item-score ypi-dual">' +
+          '<span class="mom-score">👩 ' + item.first + '</span>' +
+          '<span class="dad-score">👨 ' + item.second + '</span>' +
+        '</span>';
+      } else {
+        html += '<span class="chain-high-item-score">' + item.score + '</span>';
+      }
+      html += '<span class="chain-high-item-text">"' + escHtml(item.text) + '"</span>';
+      html += '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
   // Get raw answers object for a questionnaire type
   function getRawAnswers(type) {
     if (!state.patientData || !state.patientData.questionnaires) return null;
@@ -374,8 +446,10 @@
   function parseQData(qName, raw) {
     if (!raw || !raw.headers || !raw.scores) return null;
     var type = getQType(qName);
-    var headers = raw.headers.slice(1); // remove date column
-    var scores = raw.scores.slice(1);
+    // Skip date + name columns (new consolidated format) or just date (legacy)
+    var skipCols = (raw.headers[1] === 'שם') ? 2 : 1;
+    var headers = raw.headers.slice(skipCols);
+    var scores = raw.scores.slice(skipCols);
     var result = { type: type, date: raw.date || '', items: {} };
 
     if (type === 'ypi') {
@@ -759,7 +833,7 @@
           return; // already rendered above as table
         } else {
           var score = data.items[name];
-          var max = type === 'ysq' ? 5 : 6;
+          var max = 6;
           var pct = (score / max * 100).toFixed(0);
           var color = scoreColor(score, max);
           html += '<div class="overview-row">' +
@@ -989,30 +1063,19 @@
       return html;
     }
 
-    // Group schemas by domain
-    var domains = MAP.domains;
-    domains.forEach(function(domain) {
-      var domainSchemas = MAP.schemas.filter(function(s) { return s.domain === domain.id; });
-      // Filter to schemas that have YSQ data
-      var activeSchemas = domainSchemas.filter(function(s) {
-        return ysqData.items[s.name] !== undefined;
-      });
-      if (activeSchemas.length === 0) return;
-
-      // Sort by score descending
-      activeSchemas.sort(function(a, b) {
-        return (ysqData.items[b.name] || 0) - (ysqData.items[a.name] || 0);
-      });
-
-      html += '<div class="chain-domain-header">' + escHtml(domain.name) + ' (' + domain.nameEn + ')</div>';
-      html += '<div class="chain-cards">';
-
-      activeSchemas.forEach(function(schema) {
-        html += buildChainCard(schema, ysqData, smiData, ypsqData, ypiData);
-      });
-
-      html += '</div>';
+    // Sort ALL schemas by YSQ score descending (flat list, most active first)
+    var allSchemas = MAP.schemas.filter(function(s) {
+      return ysqData.items[s.name] !== undefined;
     });
+    allSchemas.sort(function(a, b) {
+      return (ysqData.items[b.name] || 0) - (ysqData.items[a.name] || 0);
+    });
+
+    html += '<div class="chain-cards">';
+    allSchemas.forEach(function(schema) {
+      html += buildChainCard(schema, ysqData, smiData, ypsqData, ypiData);
+    });
+    html += '</div>';
 
     return html;
   }
@@ -1038,14 +1101,18 @@
       return '<span class="chain-fff-badge ' + cls + '">' + escHtml(mode.fff) + '</span>';
     }
 
+    var domain = MAP.domains.find(function(d) { return d.id === schema.domain; });
+    var domainLabel = domain ? domain.name : '';
+
     var html = '<div class="chain-card" data-schema="' + schema.id + '">' +
       '<div class="chain-card-header ' + levelClass + '">' +
         '<div class="chain-schema-info">' +
           '<div class="chain-schema-name">' + escHtml(schema.name) + '</div>' +
           '<div class="chain-schema-name-en">' + escHtml(schema.nameEn) + '</div>' +
+          '<div class="chain-domain-tag">' + escHtml(domainLabel) + '</div>' +
         '</div>' +
         '<div class="chain-schema-score">' +
-          '<div class="chain-score-value ' + levelClass + '">' + ysqScore + '/5</div>' +
+          '<div class="chain-score-value ' + levelClass + '">' + ysqScore + '/6</div>' +
           '<div class="chain-score-label">' + levelLabel + '</div>' +
         '</div>' +
       '</div>' +
@@ -1069,6 +1136,13 @@
           '<span class="chain-ypi-badge dad">אבא: ' + ypiScores.father.toFixed(1) + '</span>' +
         '</div>';
       }
+      // Show top 2 YPI items
+      var ypiSchemaData = window._QDATA && window._QDATA.ypi &&
+        window._QDATA.ypi.schemas.find(function(s) { return s.name === ypiName; });
+      if (ypiSchemaData) {
+        var ypiTopItems = getTopItems('ypi', ypiSchemaData.items, 2, { reversed: !!ypiSchemaData.reversed });
+        html += renderTopItems(ypiTopItems, 'ypi', '📌 המשפטים הבולטים:');
+      }
     }
     html += '</div>';
 
@@ -1090,32 +1164,10 @@
           escHtml(val('coreBelief')) +
         '</div>';
 
-      // Show high-scoring YSQ items (5-6) for active/moderate schemas
-      if (level === 'active' || level === 'moderate') {
-        var ysqAnswers = getRawAnswers('ysq');
-        var ysqQData = window._QDATA && window._QDATA.ysq;
-        if (ysqAnswers && ysqQData && schema.ysqItems) {
-          var highItems = [];
-          schema.ysqItems.forEach(function(itemNum) {
-            var ans = ysqAnswers[itemNum];
-            var ansVal = typeof ans === 'number' ? ans : (ans != null ? parseInt(ans) : 0);
-            if (ansVal >= 5) {
-              var q = ysqQData.questions.find(function(qq) { return qq.number === itemNum; });
-              if (q) highItems.push({ num: itemNum, text: q.text, score: ansVal });
-            }
-          });
-          if (highItems.length > 0) {
-            html += '<div class="chain-high-items">';
-            html += '<div class="chain-high-items-label">&#128293; משפטים שהפעילו את הסכמה (ציון 5-6):</div>';
-            highItems.forEach(function(item) {
-              html += '<div class="chain-high-item">';
-              html += '<span class="chain-high-item-score">' + item.score + '</span>';
-              html += '<span class="chain-high-item-text">"' + escHtml(item.text) + '"</span>';
-              html += '</div>';
-            });
-            html += '</div>';
-          }
-        }
+      // Show top 2 YSQ items for this schema
+      if (schema.ysqItems) {
+        var ysqTopItems = getTopItems('ysq', schema.ysqItems, 2);
+        html += renderTopItems(ysqTopItems, 'ysq', '📌 המשפטים הבולטים:');
       }
 
       html += '</div>';
@@ -1161,7 +1213,25 @@
       '</span>';
     });
 
-    html += '</div></div>';
+    html += '</div>';
+
+    // Show top 2 SMI items across all related modes
+    if (smiData && schema.relatedModes.length > 0) {
+      var smiQData = window._QDATA && window._QDATA.smi;
+      if (smiQData) {
+        var allModeItems = [];
+        schema.relatedModes.forEach(function(modeCode) {
+          var smiSchema = smiQData.schemas.find(function(s) { return s.code === modeCode; });
+          if (smiSchema) {
+            smiSchema.items.forEach(function(item) { allModeItems.push(item); });
+          }
+        });
+        var smiTopItems = getTopItems('smi', allModeItems, 2);
+        html += renderTopItems(smiTopItems, 'smi', '📌 המשפטים הבולטים:');
+      }
+    }
+
+    html += '</div>';
 
     // Step 7: Positive Schema
     html += '<div class="chain-step">' +
@@ -1177,6 +1247,13 @@
       var ypsqScore = ypsqData.items[ypsqName];
       if (ypsqScore !== undefined) {
         html += '<span class="chain-positive-score">YPSQ: ' + ypsqScore.toFixed(1) + '</span>';
+      }
+      // Show top 2 YPSQ items
+      var ypsqSchemaData = window._QDATA && window._QDATA.ypsq &&
+        window._QDATA.ypsq.schemas.find(function(s) { return s.name === ypsqName; });
+      if (ypsqSchemaData) {
+        var ypsqTopItems = getTopItems('ypsq', ypsqSchemaData.items, 2);
+        html += renderTopItems(ypsqTopItems, 'ypsq', '📌 המשפטים הבולטים:');
       }
     }
     html += '</div>';

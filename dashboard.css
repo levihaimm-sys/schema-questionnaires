@@ -615,6 +615,10 @@ body {
 }
 
 /* ── High-scoring Items in Chain ── */
+.chain-domain-tag {
+  font-size: 0.7rem; color: rgba(255,255,255,0.7);
+  margin-top: 2px;
+}
 .chain-high-items {
   margin-top: 10px; padding: 10px 14px;
   background: rgba(231,76,60,0.03);
@@ -634,6 +638,17 @@ body {
   font-size: 0.78rem; font-weight: 700; color: #c0392b;
   background: rgba(231,76,60,0.1); padding: 2px 8px;
   border-radius: 4px; flex-shrink: 0;
+}
+.chain-high-item-score.ypi-dual {
+  display: flex; gap: 6px; background: none; padding: 0;
+}
+.chain-high-item-score.ypi-dual .mom-score {
+  background: rgba(231,76,60,0.1); color: #c0392b;
+  padding: 2px 8px; border-radius: 4px;
+}
+.chain-high-item-score.ypi-dual .dad-score {
+  background: rgba(41,128,185,0.1); color: #2980b9;
+  padding: 2px 8px; border-radius: 4px;
 }
 .chain-high-item-text {
   font-size: 0.82rem; color: #5a504a; line-height: 1.5;
