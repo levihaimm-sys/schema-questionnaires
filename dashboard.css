@@ -195,6 +195,17 @@ body {
   width: 38px; font-size: 0.8rem; font-weight: 600;
   text-align: left; flex-shrink: 0;
 }
+/* YSQ dual-badge layout in overview */
+.ysq-row .overview-row-bar { width: 60px; }
+.ysq-score-badges { display: flex; gap: 5px; align-items: center; flex-shrink: 0; }
+.ysq-badge-high {
+  font-size: 0.75rem; font-weight: 700;
+  white-space: nowrap;
+}
+.ysq-badge-sum {
+  font-size: 0.8rem; font-weight: 700;
+  white-space: nowrap;
+}
 /* YPI table layout in overview */
 .overview-ypi-table { display: flex; flex-direction: column; gap: 0; }
 .overview-ypi-header {

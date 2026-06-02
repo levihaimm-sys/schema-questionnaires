@@ -825,6 +825,25 @@
           var bMax = Math.max(data.items[b].mother, data.items[b].father);
           return bMax - aMax;
         });
+      } else if (type === 'ysq') {
+        // Sort by total sum (computed from raw answers when available)
+        var ysqRawForSort = getRawAnswers('ysq');
+        var ysqQDataForSort = window._QDATA && window._QDATA.ysq;
+        keys.sort(function(a, b) {
+          function getSum(schemaName) {
+            if (!ysqRawForSort || !ysqQDataForSort) return data.items[schemaName] * 5;
+            var sd = ysqQDataForSort.schemas.find(function(s) { return s.name === schemaName; });
+            if (!sd) return data.items[schemaName] * 5;
+            var s = 0;
+            sd.items.forEach(function(i) {
+              var key = String(i);
+              var ans = ysqRawForSort[key] !== undefined ? ysqRawForSort[key] : ysqRawForSort[i];
+              s += parseFloat(ans) || 0;
+            });
+            return s;
+          }
+          return getSum(b) - getSum(a);
+        });
       } else {
         keys.sort(function(a, b) { return data.items[b] - data.items[a]; });
       }
@@ -853,6 +872,35 @@
       keys.forEach(function(name) {
         if (type === 'ypi') {
           return; // already rendered above as table
+        } else if (type === 'ysq') {
+          // YSQ: show both high-answer count AND total sum
+          var ysqRawAnswers = getRawAnswers('ysq');
+          var ysqQData = window._QDATA && window._QDATA.ysq;
+          var schemaDef = ysqQData && ysqQData.schemas.find(function(s) { return s.name === name; });
+          var sum = 0, highCount = 0, maxSum = 30; // 5 items × max 6
+          if (ysqRawAnswers && schemaDef) {
+            schemaDef.items.forEach(function(itemNum) {
+              var key = String(itemNum);
+              var ans = ysqRawAnswers[key] !== undefined ? ysqRawAnswers[key] : ysqRawAnswers[itemNum];
+              var val = parseFloat(ans) || 0;
+              sum += val;
+              if (val >= 5) highCount++;
+            });
+            maxSum = schemaDef.items.length * 6;
+          } else {
+            // Fallback from average
+            sum = Math.round((data.items[name] || 0) * 5);
+          }
+          var pct = (sum / maxSum * 100).toFixed(0);
+          var barColor = sum >= maxSum * 0.6 ? '#e74c3c' : sum >= maxSum * 0.4 ? '#f39c12' : '#5b7a6e';
+          html += '<div class="overview-row ysq-row">' +
+            '<span class="overview-row-name">' + escHtml(name) + '</span>' +
+            '<div class="overview-row-bar"><div class="overview-row-fill" style="width:' + pct + '%;background:' + barColor + '"></div></div>' +
+            '<div class="ysq-score-badges">' +
+              '<span class="ysq-badge-high" title="ציונים 5-6">&#128293; ' + highCount + '</span>' +
+              '<span class="ysq-badge-sum" style="color:' + barColor + '">' + sum + '/' + maxSum + '</span>' +
+            '</div>' +
+          '</div>';
         } else {
           var score = data.items[name];
           var max = 6;
@@ -919,8 +967,25 @@
       '</div>';
     }
 
+    // For YSQ: sort schemas by total sum descending
+    var schemasToRender = qData.schemas.slice();
+    if (type === 'ysq' && hasAnswers) {
+      schemasToRender.sort(function(a, b) {
+        function getSchemaSum(schema) {
+          var s = 0;
+          schema.items.forEach(function(itemNum) {
+            var key = String(itemNum);
+            var ans = answers[key] !== undefined ? answers[key] : answers[itemNum];
+            s += parseFloat(ans) || 0;
+          });
+          return s;
+        }
+        return getSchemaSum(b) - getSchemaSum(a);
+      });
+    }
+
     // Iterate schemas
-    qData.schemas.forEach(function(schema) {
+    schemasToRender.forEach(function(schema) {
       var schemaName = schema.name;
       var schemaScore = '';
       var schemaClass = '';
@@ -934,6 +999,23 @@
             if (maxDual >= 4.5) schemaClass = 'high';
             else if (maxDual >= 3.5) schemaClass = 'moderate';
           }
+        } else if (type === 'ysq') {
+          // YSQ: compute both high count AND total sum from raw answers
+          var ysqSum = 0, ysqHigh = 0, ysqMax = schema.items.length * 6;
+          if (hasAnswers) {
+            schema.items.forEach(function(itemNum) {
+              var key = String(itemNum);
+              var ans = answers[key] !== undefined ? answers[key] : answers[itemNum];
+              var val = parseFloat(ans) || 0;
+              ysqSum += val;
+              if (val >= 5) ysqHigh++;
+            });
+          } else if (parsed && parsed.items[schemaName] !== undefined) {
+            ysqSum = Math.round(parsed.items[schemaName] * schema.items.length);
+          }
+          schemaScore = 'סה"כ ' + ysqSum + '/' + ysqMax + ' • &#128293; ' + ysqHigh + '/' + schema.items.length + ' ציונים גבוהים';
+          if (ysqSum >= ysqMax * 0.6) schemaClass = 'high';
+          else if (ysqSum >= ysqMax * 0.4) schemaClass = 'moderate';
         } else {
           var s = parsed.items[schemaName];
           if (s !== undefined) {
