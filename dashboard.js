@@ -5,7 +5,7 @@
   // CONFIG
   // ════════════════════════════════════════════
   const CONFIG = {
-    appsScriptUrl: 'https://script.google.com/macros/s/AKfycbwsDI5Vtzm5XwvbDOodC9LRMAl-Y_CbnLzX1HHAp0kvTch4_ztS81nl52HUt0k-qlgMKQ/exec',
+    appsScriptUrl: 'https://script.google.com/macros/s/AKfycbzh7ZijvAx6LoQzR6V5u56JHoK0vIzcO2FYXYfbaG4_wN7gq2wzjT2Is1sEqJweLycNtw/exec',
     dashboardToken: 'schema2024'
   };
 
