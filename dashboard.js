@@ -897,7 +897,7 @@
             '<span class="overview-row-name">' + escHtml(name) + '</span>' +
             '<div class="overview-row-bar"><div class="overview-row-fill" style="width:' + pct + '%;background:' + barColor + '"></div></div>' +
             '<div class="ysq-score-badges">' +
-              '<span class="ysq-badge-high" title="ציונים 5-6">&#128293; ' + highCount + '</span>' +
+              '<span class="ysq-badge-high" title="ציונים 5-6">' + highCount + '</span>' +
               '<span class="ysq-badge-sum" style="color:' + barColor + '">' + sum + '/' + maxSum + '</span>' +
             '</div>' +
           '</div>';
@@ -1013,7 +1013,7 @@
           } else if (parsed && parsed.items[schemaName] !== undefined) {
             ysqSum = Math.round(parsed.items[schemaName] * schema.items.length);
           }
-          schemaScore = 'סה"כ ' + ysqSum + '/' + ysqMax + ' • &#128293; ' + ysqHigh + '/' + schema.items.length + ' ציונים גבוהים';
+          schemaScore = 'סה"כ ' + ysqSum + '/' + ysqMax + ' • ' + ysqHigh + '/' + schema.items.length + ' ציונים גבוהים';
           if (ysqSum >= ysqMax * 0.6) schemaClass = 'high';
           else if (ysqSum >= ysqMax * 0.4) schemaClass = 'moderate';
         } else {
