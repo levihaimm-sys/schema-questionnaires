@@ -137,6 +137,8 @@
   function getConsolidatedPatients() {
     var consolidated = {};
     Object.keys(state.patients).forEach(function(name) {
+      // Skip garbage entries where the patient name is actually a questionnaire title
+      if (/^שאלון\s/.test(name)) return;
       var canonical = getCanonicalName(name);
       if (!consolidated[canonical]) {
         consolidated[canonical] = { questionnaires: [], sourceNames: [] };
