@@ -267,43 +267,55 @@ function getPatientsList() {
 
   sheets.forEach(sheet => {
     const sheetName = sheet.getName();
-    // Skip answer sheets
+    // Skip answer sheets (both old and new format)
     if (sheetName.endsWith(' - תשובות')) return;
 
     const lastRow = sheet.getLastRow();
     const lastCol = sheet.getLastColumn();
     if (lastRow < 2 || lastCol < 2) return;
 
-    // Verify this is a questionnaire sheet (has "שם" in column 2 header)
     const header2 = sheet.getRange(1, 2).getValue();
-    if (header2 !== 'שם') return;
 
-    // Read name + date columns for all data rows
-    const dataRows = sheet.getRange(2, 1, lastRow - 1, 2).getValues(); // [date, name]
-
-    // Track per-patient: latest date + entry count
-    const patientInfo = {};
-    dataRows.forEach(row => {
-      const pName = row[1] ? row[1].toString().trim() : '';
-      if (!pName) return;
-      if (!patientInfo[pName]) {
-        patientInfo[pName] = { lastDate: '', entries: 0 };
-      }
-      patientInfo[pName].entries++;
-      patientInfo[pName].lastDate = row[0] ? row[0].toString() : '';
-    });
-
-    // Add to patients map
-    Object.keys(patientInfo).forEach(pName => {
-      if (!patients[pName]) {
-        patients[pName] = { questionnaires: [] };
-      }
-      patients[pName].questionnaires.push({
-        name: sheetName,
-        lastDate: patientInfo[pName].lastDate,
-        entries: patientInfo[pName].entries
+    if (header2 === 'שם') {
+      // ── NEW FORMAT: sheet name = questionnaire name ──
+      // Columns: [תאריך, שם, schema1, schema2, ...]
+      const dataRows = sheet.getRange(2, 1, lastRow - 1, 2).getValues(); // [date, name]
+      const patientInfo = {};
+      dataRows.forEach(row => {
+        const pName = row[1] ? row[1].toString().trim() : '';
+        if (!pName) return;
+        if (!patientInfo[pName]) {
+          patientInfo[pName] = { lastDate: '', entries: 0 };
+        }
+        patientInfo[pName].entries++;
+        patientInfo[pName].lastDate = row[0] ? row[0].toString() : '';
       });
-    });
+      Object.keys(patientInfo).forEach(pName => {
+        if (!patients[pName]) patients[pName] = { questionnaires: [] };
+        patients[pName].questionnaires.push({
+          name: sheetName,
+          lastDate: patientInfo[pName].lastDate,
+          entries: patientInfo[pName].entries
+        });
+      });
+
+    } else {
+      // ── OLD FORMAT: sheet name = "patientName - questionnaireName" ──
+      // Columns: [תאריך, schema1, schema2, ...] (no שם column)
+      const sepIdx = sheetName.indexOf(' - ');
+      if (sepIdx < 0) return;
+      const patientName = sheetName.substring(0, sepIdx).trim();
+      const questionnaireName = sheetName.substring(sepIdx + 3).trim();
+      if (!patientName || !questionnaireName) return;
+
+      if (!patients[patientName]) patients[patientName] = { questionnaires: [] };
+      const lastDate = sheet.getRange(lastRow, 1).getValue();
+      patients[patientName].questionnaires.push({
+        name: questionnaireName,
+        lastDate: lastDate ? lastDate.toString() : '',
+        entries: Math.max(0, lastRow - 1)
+      });
+    }
   });
 
   return { patients: patients };
@@ -324,50 +336,79 @@ function getPatientData(patientName) {
     const lastCol = sheet.getLastColumn();
     if (lastRow < 2 || lastCol < 2) return;
 
-    // Verify questionnaire sheet
     const header2 = sheet.getRange(1, 2).getValue();
-    if (header2 !== 'שם') return;
 
-    const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+    if (header2 === 'שם') {
+      // ── NEW FORMAT: sheet name = questionnaire name ──
+      const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
 
-    // Find latest row for this patient (search from bottom up)
-    const nameCol = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
-    let patientRowIdx = -1;
-    for (let i = nameCol.length - 1; i >= 0; i--) {
-      if (nameCol[i][0] && nameCol[i][0].toString().trim() === patientName) {
-        patientRowIdx = i + 2; // row 1 = header, data starts at row 2
-        break;
-      }
-    }
-
-    if (patientRowIdx < 0) return;
-
-    const latestRow = sheet.getRange(patientRowIdx, 1, 1, lastCol).getValues()[0];
-
-    data.questionnaires[sheetName] = {
-      headers: headers,
-      scores: latestRow,
-      date: latestRow[0] ? latestRow[0].toString() : ''
-    };
-
-    // Get raw answers from companion answers sheet
-    const answersSheetName = sheetName + ' - תשובות';
-    const answersSheet = ss.getSheetByName(answersSheetName);
-    if (answersSheet && answersSheet.getLastRow() >= 2) {
-      const aLastRow = answersSheet.getLastRow();
-      const aNameCol = answersSheet.getRange(2, 2, aLastRow - 1, 1).getValues();
-      let aRowIdx = -1;
-      for (let i = aNameCol.length - 1; i >= 0; i--) {
-        if (aNameCol[i][0] && aNameCol[i][0].toString().trim() === patientName) {
-          aRowIdx = i + 2;
+      // Find latest row for this patient (search from bottom up)
+      const nameCol = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
+      let patientRowIdx = -1;
+      for (let i = nameCol.length - 1; i >= 0; i--) {
+        if (nameCol[i][0] && nameCol[i][0].toString().trim() === patientName) {
+          patientRowIdx = i + 2; // row 1 = header, data starts at row 2
           break;
         }
       }
-      if (aRowIdx >= 0) {
-        const answersJson = answersSheet.getRange(aRowIdx, 3).getValue();
+      if (patientRowIdx < 0) return;
+
+      const latestRow = sheet.getRange(patientRowIdx, 1, 1, lastCol).getValues()[0];
+      data.questionnaires[sheetName] = {
+        headers: headers,
+        scores: latestRow,
+        date: latestRow[0] ? latestRow[0].toString() : ''
+      };
+
+      // Get raw answers – new format: companion sheet with [תאריך, שם, answers_json]
+      const answersSheetName = sheetName + ' - תשובות';
+      const answersSheet = ss.getSheetByName(answersSheetName);
+      if (answersSheet && answersSheet.getLastRow() >= 2) {
+        const aLastRow = answersSheet.getLastRow();
+        const aNameCol = answersSheet.getRange(2, 2, aLastRow - 1, 1).getValues();
+        let aRowIdx = -1;
+        for (let i = aNameCol.length - 1; i >= 0; i--) {
+          if (aNameCol[i][0] && aNameCol[i][0].toString().trim() === patientName) {
+            aRowIdx = i + 2;
+            break;
+          }
+        }
+        if (aRowIdx >= 0) {
+          const answersJson = answersSheet.getRange(aRowIdx, 3).getValue();
+          if (answersJson) {
+            try {
+              data.questionnaires[sheetName].answers = JSON.parse(answersJson);
+            } catch(e) { /* ignore parse errors */ }
+          }
+        }
+      }
+
+    } else {
+      // ── OLD FORMAT: sheet name = "patientName - questionnaireName" ──
+      // Columns: [תאריך, schema1, schema2, ...] (no שם column)
+      const sepIdx = sheetName.indexOf(' - ');
+      if (sepIdx < 0) return;
+      const sheetPatient = sheetName.substring(0, sepIdx).trim();
+      const questionnaireName = sheetName.substring(sepIdx + 3).trim();
+      if (sheetPatient !== patientName) return;
+
+      const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+      const latestRow = sheet.getRange(lastRow, 1, 1, lastCol).getValues()[0];
+      data.questionnaires[questionnaireName] = {
+        headers: headers,
+        scores: latestRow,
+        date: latestRow[0] ? latestRow[0].toString() : ''
+      };
+
+      // Get raw answers – old format: companion sheet with [תאריך, answers_json]
+      const answersSheetName = sheetName + ' - תשובות';
+      const answersSheet = ss.getSheetByName(answersSheetName);
+      if (answersSheet && answersSheet.getLastRow() >= 2) {
+        const aLastRow = answersSheet.getLastRow();
+        const answersJson = answersSheet.getRange(aLastRow, 2).getValue();
         if (answersJson) {
           try {
-            data.questionnaires[sheetName].answers = JSON.parse(answersJson);
+            data.questionnaires[questionnaireName].answers = JSON.parse(answersJson);
           } catch(e) { /* ignore parse errors */ }
         }
       }
