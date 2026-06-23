@@ -491,6 +491,29 @@
       }
     }
 
+    // SMI: recalculate mode averages from raw answers, applying reversal for reversed items
+    if (type === 'smi' && raw.answers) {
+      var smiQData = window._QDATA && window._QDATA.smi;
+      if (smiQData && smiQData.schemas) {
+        var smiRevItems = (smiQData.scoring && smiQData.scoring.reverseItems) || [];
+        smiQData.schemas.forEach(function(schema) {
+          var sum = 0, count = 0;
+          schema.items.forEach(function(itemNum) {
+            var key = String(itemNum);
+            var ans = raw.answers[key] !== undefined ? raw.answers[key] : raw.answers[itemNum];
+            var val = parseFloat(ans);
+            if (!isNaN(val) && val > 0) {
+              sum += smiRevItems.includes(itemNum) ? (7 - val) : val;
+              count++;
+            }
+          });
+          if (count > 0) {
+            result.items[schema.name] = Math.round((sum / count) * 100) / 100;
+          }
+        });
+      }
+    }
+
     return result;
   }
 
@@ -1100,23 +1123,24 @@
           var answer = answers[itemNum];
           var isReversed = reverseItems.includes(itemNum);
           var val = typeof answer === 'number' ? answer : (answer != null ? parseInt(answer) : null);
+          var displayVal = (val !== null && !isNaN(val) && isReversed) ? (7 - val) : val;
           var valClass = '';
           var isHigh = false;
-          if (val !== null && !isNaN(val)) {
+          if (displayVal !== null && !isNaN(displayVal)) {
             if (isCountHigh) {
-              isHigh = val >= highThreshold;
+              isHigh = displayVal >= highThreshold;
               if (isHigh) valClass = 'high';
             } else {
-              if (val >= 5) { valClass = 'high'; isHigh = true; }
-              else if (val >= 4) valClass = 'moderate';
+              if (displayVal >= 5) { valClass = 'high'; isHigh = true; }
+              else if (displayVal >= 4) valClass = 'moderate';
             }
           }
 
           html += '<div class="qdetail-question' + (isHigh ? ' high-answer' : '') + '">';
           html += '<span class="qdetail-q-num">' + itemNum + '.</span>';
           html += '<span class="qdetail-q-text">' + escHtml(qText) + '</span>';
-          html += '<span class="qdetail-q-val ' + valClass + '">' + (val !== null && !isNaN(val) ? val : '-') + '</span>';
-          if (isReversed) html += '<span class="qdetail-q-reversed" title="פריט הפוך (הציון מתהפך בחישוב)">&#8635;</span>';
+          html += '<span class="qdetail-q-val ' + valClass + '">' + (displayVal !== null && !isNaN(displayVal) ? displayVal : '-') + '</span>';
+          if (isReversed) html += '<span class="qdetail-q-reversed" title="פריט הפוך — הציון המוצג הוא לאחר היפוך (7 פחות הציון המקורי)">&#8635;</span>';
           html += '</div>';
         });
         html += '</div>';
